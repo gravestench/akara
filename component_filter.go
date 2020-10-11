@@ -28,7 +28,7 @@ func (cf *ComponentFilter) Allow(bs *BitSet) bool {
 		return false
 	}
 
-	if cf.Required != nil {
+	if cf.Required != nil && !cf.Required.Empty() {
 		if !cf.Required.ContainsAll(bs) {
 			return false
 		}
@@ -40,7 +40,7 @@ func (cf *ComponentFilter) Allow(bs *BitSet) bool {
 		}
 	}
 
-	if cf.Forbidden != nil {
+	if cf.Forbidden != nil && !cf.Forbidden.Empty(){
 		if cf.Forbidden.Intersects(bs) {
 			return false
 		}
