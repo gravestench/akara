@@ -23,25 +23,25 @@ func (cf *ComponentFilter) Equals(other *ComponentFilter) bool {
 }
 
 // Allow returns true if the given bitset is not rejected by the component filter
-func (cf *ComponentFilter) Allow(bs *BitSet) bool {
+func (cf *ComponentFilter) Allow(other *BitSet) bool {
 	if cf == nil {
 		return false
 	}
 
 	if cf.Required != nil && !cf.Required.Empty() {
-		if !cf.Required.ContainsAll(bs) {
+		if !other.ContainsAll(cf.Required) {
 			return false
 		}
 	}
 
 	if cf.OneRequired != nil {
-		if !cf.OneRequired.Intersects(bs) && !cf.OneRequired.Empty() {
+		if !cf.OneRequired.Intersects(other) && !cf.OneRequired.Empty() {
 			return false
 		}
 	}
 
 	if cf.Forbidden != nil && !cf.Forbidden.Empty(){
-		if cf.Forbidden.Intersects(bs) {
+		if cf.Forbidden.Intersects(other) {
 			return false
 		}
 	}
