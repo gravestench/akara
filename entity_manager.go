@@ -25,19 +25,19 @@ type EntityManager struct {
 	Subscriptions  []*Subscription
 }
 
-// AddSubscription will try to add the given subscription to the entity manager subscription slice.
-// If there is already a subscription with an identical component filter, then the argument
-// subscription will be mutated to point to this existing one. This allows many systems to share
-// subscriptions
-func (em *EntityManager) AddSubscription(s *Subscription) {
+// AddSubscription will look for an identical component filter and return an existing
+// subscription if it can. Otherwise, it creates a new subscription and returns it.
+func (em *EntityManager) AddSubscription(cf *ComponentFilter) *Subscription {
 	for subIdx := range em.Subscriptions {
-		if em.Subscriptions[subIdx].Filter.Equals(s.Filter) {
-			s = em.Subscriptions[subIdx] // nolint:staticcheck // we're mutating the pointer...
-			return
+		if em.Subscriptions[subIdx].Filter.Equals(cf) {
+			return em.Subscriptions[subIdx]
 		}
 	}
 
+	s := NewSubscription(cf)
 	em.Subscriptions = append(em.Subscriptions, s)
+
+	return s
 }
 
 // NewEntity creates a new entity and Component BitSet
