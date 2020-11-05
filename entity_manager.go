@@ -4,8 +4,11 @@ import (
 	"sync/atomic"
 )
 
-// EID is an entity ID
-type EID = uint64
+// EntityID is an entity ID
+type EntityID = uint64
+
+// EID is shorthand for EntityID
+type EID = EntityID
 
 // NewEntityManager creates a new entity manager
 func NewEntityManager(w *World) *EntityManager {
