@@ -157,6 +157,14 @@ func (bs *BitSet) NotEmpty() bool {
 
 // ContainsAll returns true if this bitset contains all flags present in the other bitset
 func (bs *BitSet) ContainsAll(other *BitSet) bool {
+	if other.Empty() {
+		return true
+	}
+
+	if bs.Empty() {
+		return false
+	}
+
 	var numLowestGroups int
 
 	numGroups, numOtherGroups := len(bs.groups), len(other.groups)
@@ -189,6 +197,10 @@ func (bs *BitSet) ContainsAll(other *BitSet) bool {
 
 // Intersects returns true if this bitset contains any of the bits from the other bitset
 func (bs *BitSet) Intersects(other *BitSet) bool {
+	if bs.Empty() {
+		return false
+	}
+
 	var numLowestGroups int
 
 	numGroups, numOtherGroups := len(bs.groups), len(other.groups)
