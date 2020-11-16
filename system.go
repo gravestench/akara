@@ -4,11 +4,16 @@ package akara
 type System interface {
 	Active() bool
 	SetActive(bool)
-	Update()
+	Destroy()
 }
 
 // SystemInitializer is a system with an Init method
 type SystemInitializer interface {
 	System
 	Init(*World)
+}
+
+type SystemUpdater interface {
+	System
+	Update()
 }

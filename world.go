@@ -51,6 +51,17 @@ func (w *World) AddSystem(s System) *World {
 	return w
 }
 
+// RemoveSystem adds a system to the world
+func (w *World) RemoveSystem(s System) *World {
+	for idx := range w.Systems {
+		if w.Systems[idx] == s {
+			w.Systems = append(w.Systems[:idx], w.Systems[idx:]...)
+		}
+	}
+
+	return w
+}
+
 // UpdateEntity updates the entity in the world. This causes the entity manager to
 // update all subscriptions for this entity ID.
 func (w *World) UpdateEntity(id EID) {
@@ -62,9 +73,16 @@ func (w *World) Update(dt time.Duration) error {
 	w.TimeDelta = dt
 
 	for sysIdx := range w.Systems {
-		if w.Systems[sysIdx].Active() {
-			w.Systems[sysIdx].Update()
+		if !w.Systems[sysIdx].Active() {
+			continue
 		}
+
+		updater, ok := w.Systems[sysIdx].(SystemUpdater)
+		if !ok {
+			continue
+		}
+
+		updater.Update()
 	}
 
 	return nil
