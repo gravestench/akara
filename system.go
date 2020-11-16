@@ -4,7 +4,7 @@ package akara
 type System interface {
 	Active() bool
 	SetActive(bool)
-	Process()
+	Update()
 }
 
 // SystemInitializer is a system with an Init method

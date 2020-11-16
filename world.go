@@ -63,7 +63,7 @@ func (w *World) Update(dt time.Duration) error {
 
 	for sysIdx := range w.Systems {
 		if w.Systems[sysIdx].Active() {
-			w.Systems[sysIdx].Process()
+			w.Systems[sysIdx].Update()
 		}
 	}
 
