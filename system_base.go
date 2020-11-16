@@ -16,7 +16,7 @@ func (s *BaseSystem) SetActive(b bool) {
 	s.active = b
 }
 
-// Destroy the system and remove it from the world
+// Destroy removes the system from the world
 func (s *BaseSystem) Destroy() {
 	s.World.RemoveSystem(s)
 }
