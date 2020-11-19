@@ -44,6 +44,17 @@ func (w *World) AddSystem(s System) *World {
 
 	s.SetActive(true)
 
+	if subscriber, ok := s.(SubscriberSystem); ok {
+		subs := subscriber.GetSubscriptions()
+		for idx := range subs {
+			subs[idx] = w.AddSubscription(subs[idx].Filter)
+		}
+	}
+
+	if baseContainer, ok := s.(hasBaseSystem); ok {
+		baseContainer.Base().World = w
+	}
+
 	if initializer, ok := s.(SystemInitializer); ok {
 		initializer.Init(w)
 	}

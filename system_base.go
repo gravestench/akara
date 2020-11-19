@@ -1,9 +1,17 @@
 package akara
 
+type hasBaseSystem interface {
+	Base() *BaseSystem
+}
+
 // BaseSystem is the base system type
 type BaseSystem struct {
 	*World
 	active bool
+}
+
+func (s *BaseSystem) Base() *BaseSystem {
+	return s
 }
 
 // Active whether or not the system is active
