@@ -1,8 +1,6 @@
 package akara
 
-// Component is something that can be identified with a component ID, as well
-// as something that can create a new component map for itself
+// Component can be anything with a `New` method that creates a new component instance
 type Component interface {
-	ComponentIdentifier
-	ComponentMapProvider
+	New() Component
 }

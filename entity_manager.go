@@ -44,7 +44,7 @@ func (em *EntityManager) AddSubscription(cf *ComponentFilter) *Subscription {
 }
 
 // NewEntity creates a new entity and Component BitSet
-func (em *EntityManager) NewEntity() uint64 {
+func (em *EntityManager) NewEntity() EID {
 	atomic.AddUint64(&em.nextEntityID, 1)
 	em.ComponentFlags[em.nextEntityID] = &BitSet{}
 
@@ -71,13 +71,13 @@ func (em *EntityManager) RemoveEntity(id EID) {
 // The bitset just says which components an entity currently has.
 func (em *EntityManager) UpdateComponentFlags(id EID) {
 	// for each component map ...
-	for mapIdx := range em.world.ComponentManager.maps {
+	for idx := range em.world.factories {
 		// ... check if the entity has a component in this component map ...
-		_, found := em.world.ComponentManager.maps[mapIdx].Get(id)
+		_, found := em.world.factories[idx].Get(id)
 
 		// ... for the bit index that corresponds to the map id,
 		// use the true/false value we just obtained as the value for that bit in the bitset.
-		em.ComponentFlags[id].Set(int(em.world.ComponentManager.maps[mapIdx].ID()), found)
+		em.ComponentFlags[id].Set(int(em.world.factories[idx].ID()), found)
 	}
 }
 

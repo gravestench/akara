@@ -1,16 +1,29 @@
 package akara
 
-// ComponentMap is the interface for a component map; something that can look up
-// components from an entity ID.
-type ComponentMap interface {
-	Component
-	Init(*World)               // sets up
-	Add(EID) Component         // returns the component that was added for the given entity
-	Get(EID) (Component, bool) // returns the component and bool if component exists
-	Remove(EID)                // removes the component for the given entity
+// ComponentMap is used to keep track of component instances,
+type ComponentMap struct {
+	base *ComponentFactory
+	instances map[EID]Component
 }
 
-// ComponentMapProvider is something that can be used to create a new component map instance
-type ComponentMapProvider interface {
-	NewMap() ComponentMap
+func (m *ComponentMap) Add(id EID) Component {
+	if c, found := m.Get(id); found {
+		return c
+	}
+
+	c := m.base.factoryNew(id)
+
+	m.base.world.UpdateEntity(id)
+
+	return c
 }
+
+func (m *ComponentMap) Get(id EID) (Component, bool) {
+	c, found := m.instances[id]
+	return c, found
+}
+
+func (m *ComponentMap) Remove(id EID) {
+	delete(m.instances, id)
+}
+
