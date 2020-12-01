@@ -1,7 +1,10 @@
 package akara
 
+import "sync"
+
 // ComponentMap is used to keep track of component instances,
 type ComponentMap struct {
+	mux *sync.Mutex
 	base *ComponentFactory
 	instances map[EID]Component
 }
@@ -11,7 +14,11 @@ func (m *ComponentMap) Add(id EID) Component {
 		return c
 	}
 
+	m.mux.Lock()
+
 	c := m.base.factoryNew(id)
+
+	m.mux.Unlock()
 
 	m.base.world.UpdateEntity(id)
 
@@ -19,11 +26,18 @@ func (m *ComponentMap) Add(id EID) Component {
 }
 
 func (m *ComponentMap) Get(id EID) (Component, bool) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
 	c, found := m.instances[id]
+
 	return c, found
 }
 
 func (m *ComponentMap) Remove(id EID) {
+	m.mux.Lock()
+	defer m.mux.Unlock()
+
 	delete(m.instances, id)
 }
 

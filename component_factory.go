@@ -18,12 +18,7 @@ func (b *ComponentFactory) ID() ComponentID {
 }
 
 func (b *ComponentFactory) factoryNew(id EID) Component {
-	instance, found := b.Get(id)
-	if found {
-		return instance
-	}
-
-	instance = b.provider()
+	instance := b.provider()
 
 	b.instances[id] = instance
 

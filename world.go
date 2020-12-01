@@ -3,6 +3,7 @@ package akara
 import (
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -12,9 +13,9 @@ type componentFactories = map[ComponentID]*ComponentFactory
 // NewWorld creates a new world instance
 func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
-		registry: make(componentRegistry),
-		factories: make(componentFactories),
-		Systems: make([]System, 0),
+		registry:    make(componentRegistry),
+		factories:   make(componentFactories),
+		Systems:     make([]System, 0),
 		removeQueue: make([]System, 0),
 	}
 
@@ -35,9 +36,9 @@ func NewWorld(cfg *WorldConfig) *World {
 type World struct {
 	TimeDelta time.Duration
 	*EntityManager
-	registry componentRegistry
-	factories componentFactories
-	Systems []System
+	registry    componentRegistry
+	factories   componentFactories
+	Systems     []System
 	removeQueue []System
 }
 
@@ -56,6 +57,7 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 	factory.world = w
 
 	factory.ComponentMap = &ComponentMap{
+		mux:       &sync.Mutex{},
 		base:      factory,
 		instances: make(map[EID]Component),
 	}
