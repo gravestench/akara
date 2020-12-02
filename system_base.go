@@ -28,3 +28,8 @@ func (s *BaseSystem) SetActive(b bool) {
 func (s *BaseSystem) Destroy() {
 	s.World.RemoveSystem(s)
 }
+
+// InjectComponent is shorthand for registering a component and placing the factory in the given destination
+func (s *BaseSystem) InjectComponent(c Component, dst **ComponentFactory) {
+	*dst = s.GetComponentFactory(s.RegisterComponent(c))
+}
