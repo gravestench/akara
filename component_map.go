@@ -36,8 +36,11 @@ func (m *ComponentMap) Get(id EID) (Component, bool) {
 
 func (m *ComponentMap) Remove(id EID) {
 	m.mux.Lock()
-	defer m.mux.Unlock()
 
 	delete(m.instances, id)
+	
+	m.mux.Unlock()
+
+	m.base.world.UpdateEntity(id)
 }
 
