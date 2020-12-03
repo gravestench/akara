@@ -17,6 +17,7 @@ func NewWorld(cfg *WorldConfig) *World {
 		factories:   make(componentFactories),
 		Systems:     make([]System, 0),
 		removeQueue: make([]System, 0),
+		Events:      NewEventEmitter(),
 	}
 
 	world.EntityManager = NewEntityManager(world)
@@ -36,6 +37,7 @@ func NewWorld(cfg *WorldConfig) *World {
 type World struct {
 	TimeDelta time.Duration
 	*EntityManager
+	Events      *EventEmitter
 	registry    componentRegistry
 	factories   componentFactories
 	Systems     []System
