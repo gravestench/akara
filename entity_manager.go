@@ -40,6 +40,25 @@ func (em *EntityManager) AddSubscription(cf *ComponentFilter) *Subscription {
 	s := NewSubscription(cf)
 	em.Subscriptions = append(em.Subscriptions, s)
 
+	// need to inform new subscriptions about existing entities
+	for _, cid := range cf.Required.ToIntArray() {
+		for eid := range em.world.factories[ComponentID(cid)].instances {
+			em.world.UpdateEntity(eid)
+		}
+	}
+
+	for _, cid := range cf.OneRequired.ToIntArray() {
+		for eid := range em.world.factories[ComponentID(cid)].instances {
+			em.world.UpdateEntity(eid)
+		}
+	}
+
+	for _, cid := range cf.Forbidden.ToIntArray() {
+		for eid := range em.world.factories[ComponentID(cid)].instances {
+			em.world.UpdateEntity(eid)
+		}
+	}
+
 	return s
 }
 
