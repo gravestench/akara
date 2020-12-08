@@ -79,6 +79,7 @@ func (em *EntityManager) RemoveEntity(id EID) {
 					em.Subscriptions[subIdx].entities[:entIdx],
 					em.Subscriptions[subIdx].entities[entIdx+1:]...,
 				)
+				break
 			}
 		}
 	}
