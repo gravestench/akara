@@ -14,9 +14,9 @@ The `World` contains the `EntityManager`, `ComponentManager`, and a slice of all
 The world is created using a `WorldConfig`, which is built from systems:
 ```golang
 cfg := akara.NewWorldConfig().
-        With(NewMovementSystem()).
-        With(NewRenderSystem()).
-        With(NewPhysicsSystem())
+        With(&MovementSystem{}).
+        With(&RenderSystem{}).
+        With(&PhysicsSystem{})
 
 world := akara.NewWorld(cfg)
 ```
@@ -32,7 +32,7 @@ world.Update(durationSinceLastUpdate)
 Entities are just unique `uint64`'s. They are used to create associations with components
  (among other things...).
  
- For now, all you need to know is that this is essentially what an entity is:
+For now, all you need to know is that this is essentially what an entity is:
  ```golang
 // EID is an entity ID
 type EID = uint64
@@ -41,32 +41,79 @@ type EID = uint64
 The `EntityManager` is responsible for creating new entity IDs, as well as a `BitSet` for each
  entity. Bitsets describe which components an entity currently has. We will talk about BitSets later...
 
-### Components, ComponentMaps, and the ComponentManager
- - **Component** -- Something that has a unique identifier (for the type of component), and a
-  means of creating a `ComponentMap`. 
-
- - **ComponentMap** -- Responsible for creating, retrieving, and deleting instances of
-  components. The component map is what maintains the mapping of entity IDs to component instances.
-
- - **ComponentManager** -- A container for all component maps. Internally, it used the component
-  ID as the key into a map of ComponentMaps.
-
-Both `Components` and `ComponentMap`s need to implement these two interfaces.
-
+### Components & Component Factories
+`Components` only need to implement this interface:
  ```golang
-type ComponentIdentifier interface {
-	ID() ComponentID
-}
-
-type ComponentMapProvider interface {
-	NewMap() ComponentMap
+type Component interface {
+    New() Component
 }
 ```
 
-**It's really important that the component type IDs are unique!**
+Here's an example `Velocity` component:
+```golang
+type Velocity struct {
+	x, y float64
+}
 
-I think it's worth stating again for clarity the _component IDs are NOT unique to an instance of
- a component, it is an ID for the TYPE of component._
+func (*Velocity) New() akara.Component {
+	return &Velocity{}
+}
+```
+
+Components must be registered in the ECS world. 
+The reason for this is because each distinct type of component is given a `ComponentID` internally.
+This ID ends up being used to keep track of what components each entity has.
+It's also used to retrieve a `ComponentFactory` instance:
+```golang
+velocityID := world.RegisterComponent(&Velocity{})
+factory := world.GetComponentFactory(velocityID)
+```
+
+Component factories are used to create, retrieve, and remove components from entities:
+```golang
+id := world.RegisterComponent(&Velocity{})
+factory := world.GetComponentFactory(id)
+
+e := world.NewEntity()
+
+// returns a akara.Component interface!
+c := factory.Add(e) 
+
+// we must cast the interface to our concrete component type
+v := c.(*Velocity) 
+```
+
+Notice how we always have to cast the returned interface back to our concrete component implementation?
+We can get around this by making a concrete component factory:
+```golang
+type VelocityFactory struct {
+	*akara.ComponentFactory
+}
+
+func (m *VelocityFactory) Add(id akara.EID) *Velocity {
+	return m.ComponentFactory.Add(id).(*Velocity)
+}
+
+func (m *VelocityFactory) Get(id akara.EID) (*Velocity, bool) {
+	component, found := m.ComponentFactory.Get(id)
+	if !found {
+		return nil, found
+	}
+
+	return component.(*Velocity), found
+}
+```
+
+this allows us to just use `Add` and `Get` without having to cast the returned value.
+
+It's worth mentioning that each distinct component type that is registered will only have one
+component factory and one component ID.
+```golang
+id1 := world.RegisterComponent(&Velocity{})
+id2 := world.RegisterComponent(&Velocity{})
+
+isSame := id1 == id2 // true 
+```
 
  ### Systems
 Systems are fairly simple in that they need only implement this interface:
@@ -81,7 +128,7 @@ Systems are fairly simple in that they need only implement this interface:
 However, there are a couple of concrete system types provided which you can use to create your own
  systems.
  
- The first is `BaseSystem`, and it has its own `Active` and `SetActive` methods.
+The first is `BaseSystem`, and it has its own `Active` and `SetActive` methods.
  ```golang
 type BaseSystem struct {
 	*World
@@ -108,8 +155,7 @@ func (s *ExampleSystem) Process() {
 }
 ```
 
-However, this is a pretty boring system, and you're probably wondering where the entities are
- going to come from. This leads into...
+The second type of system is a `SubscriberSystem`, but before we talk about that we need to talk about subscriptions...
 
 ### Subscriptions, ComponentFilters, and BitSets! Oh, my!
 Before we can talk about `Subscription`s or `ComponentFilter`s, we need to know what a `BitSet` is.
@@ -174,135 +220,93 @@ type SubscriberSystem struct {
 
 ## Examples
 
-#### Enumerating Component ID's
-You may want to put all of the component ID's into a single spot for easy enumeration, like this:
+#### Creating a world
 ```golang
-const (
-	RenderableCID ComponentID = iota
-	PositionCID
-	VelocityCID
-)
+// make a world config
+cfg := akara.NewWorldConfig()
+
+// add systems to the config
+cfg.With(&MovementSystem{})
+
+// create a world instance using the world config
+world := akara.NewWorld(cfg) 
 ```
 
-#### Example: Component
+#### Declaring a Component
+Here is the bare minimum required to create a new component:
 ```golang
-type PositionComponent struct {
-	*Vector
+type Velocity struct {
+	*Vector3
 }
 
-// ID returns a unique identifier for the component type
-func (*PositionComponent) ID() akara.ComponentID {
-	return PositionCID
+func (*Velocity) New() akara.Component {
+	return &Velocity{
+		Vector3: NewVector3(0, 0, 0),
+	}
 }
-
-// NewMap returns a new component map the component type
-func (*PositionComponent) NewMap() akara.ComponentMap {
-	return NewPositionMap()
-}
-
 ```
+Initialization logic specific to this component (like creating instances of another *struct) belongs 
+inside of the `New` method. 
 
-#### Example: ComponentMap
+#### Concrete Component Factories
+A concrete component factory is just a wrapper for the generic component factory, 
+but it casts the returned values from `Add` and `Get` to the concrete component implementation.
+This is just to prevent you from having to cast the component interface to struct pointers.
 ```golang
-// NewPositionMap creates a new map of entity ID's to position components
-func NewPositionMap() *PositionMap {
-	cm := &PositionMap{
-		components: make(map[akara.EID]*PositionComponent),
+type VelocityFactory struct {
+	*akara.ComponentFactory
+}
+
+func (m *VelocityFactory) Add(id akara.EID) *Velocity {
+	return m.ComponentFactory.Add(id).(*Velocity)
+}
+
+func (m *VelocityFactory) Get(id akara.EID) (*Velocity, bool) {
+	component, found := m.ComponentFactory.Get(id)
+	if !found {
+		return nil, found
 	}
 
-	return cm
+	return component.(*Velocity), found
 }
 ```
 
+#### Creating a ComponentFilter
 ```golang
-// PositionMap is a map of entity ID's to position components
-type PositionMap struct {
-	world      *akara.World
-	components map[akara.EID]*PositionComponent
-}
+cfg := akara.NewFilter()
 
-// Init initializes the component map with the given world
-func (cm *PositionMap) Init(world *akara.World) {
-	cm.world = world
-}
-
-// ID returns a unique identifier for the component type
-func (*PositionMap) ID() akara.ComponentID {
-	return PositionCID
-}
-
-// NewMap returns a new component map for this component type
-func (*PositionMap) NewMap() akara.ComponentMap {
-	return NewPositionMap()
-}
-
-// Add a new PositionComponent for the given entity id, return that component.
-// If the entity already has a component, just return that one.
-func (cm *PositionMap) Add(id akara.EID) akara.Component {
-	if com, has := cm.components[id]; has {
-		return com
-	}
-
-	position := NewVector(0, 0)
-	cm.components[id] = &PositionComponent{Position: &position}
-
-	cm.world.UpdateEntity(id)
-
-	return cm.components[id]
-}
-
-// AddPosition adds a new PositionComponent for the given entity id and returns it.
-// If the entity already has a position component, just return that one.
-// this is a convenience method for the generic Add method, as it returns a
-// *PositionComponent instead of an akara.Component interface
-func (cm *PositionMap) AddPosition(id akara.EID) *PositionComponent {
-	return cm.Add(id).(*PositionComponent)
-}
-
-// Get returns the component associated with the given entity id
-func (cm *PositionMap) Get(id akara.EID) (akara.Component, bool) {
-	entry, found := cm.components[id]
-	return entry, found
-}
-
-// GetPosition returns the position component associated with the given entity id
-func (cm *PositionMap) GetPosition(id akara.EID) (*PositionComponent, bool) {
-	entry, found := cm.components[id]
-	return entry, found
-}
-
-// Remove a component for the given entity id, return the component.
-func (cm *PositionMap) Remove(id akara.EID) {
-	delete(cm.components, id)
-	cm.world.UpdateEntity(id)
-}
-```
-
-#### Example: Component `nil` Instance
-This may seem silly, and perhaps it is, but look for how it is used in the following examples.
-```golang
-// Position is a convenient reference to be used as a component identifier
-var Position = (*PositionComponent)(nil)
-```
-
-#### Example: Creating a ComponentFilter with the filter builder
-```golang
-cfg := akara.NewFilter().Require(components.Position, components.Velocity)
+cfg.Require(
+    components.Position, 
+    components.Velocity,
+    )
 
 filter := cfg.Build()
 ```
 
-#### Example: System
-**Subscriber System Implementation**
-```golang
-// MovementSystem handles entity movement based on velocity and position components
-type MovementSystem struct {
-	*akara.SubscriberSystem
-	positions  *components.PositionMap
-	velocities *components.VelocityMap
-}
+#### Example System (with Subscriptions!)
+For systems that use subscriptions, it is recommended that you embed an `akara.BaseSubscriberSystem` as it 
+provides the generic methods for dealing with subscriptions. It also contains an `akara.BaseSystem`, which has other
+generic system methods.
 
-// Init initializes the system with the given world
+It is also recommended that all component factories be placed inside of a common struct and given explicit names.
+This helps to keep the code clear when writing complicated systems.
+
+As of writing, there is no general guide for how subscriptions are managed, but just embedding them in the system struct
+and giving them descriptive names is sufficient.
+```golang
+type MovementSystem struct {
+    akara.SubscriberSystem
+    components struct {
+        positions   PositionFactory
+        velocities  VelocityFactory
+    }
+    movingEntities []akara.EID
+}
+```
+
+As of writing, all systems should set their `World` and call `SetActive(false)` if world is nil. 
+After that, actual system initialization logic is added: 
+```golang
 func (m *MovementSystem) Init(world *akara.World) {
 	m.World = world
 
@@ -311,54 +315,61 @@ func (m *MovementSystem) Init(world *akara.World) {
 		return
 	}
 
-	for subIdx := range m.Subscriptions {
-		m.AddSubscription(m.Subscriptions[subIdx])
-	}
-
-	// try to inject the components we require, then cast the returned
-	// abstract ComponentMap back to the concrete implementation
-	m.positions = m.InjectMap(components.Position).(*components.PositionMap)
-	m.velocities = m.InjectMap(components.Velocity).(*components.VelocityMap)
+    m.setupComponents()
+    m.setupSubscriptions()
 }
+```
 
-// Process processes all of the Entities
-func (m *MovementSystem) Process() {
-	for subIdx := range m.Subscriptions {
-		entities := m.Subscriptions[subIdx].GetEntities()
-		for entIdx := range entities {
-			m.ProcessEntity(entities[entIdx])
-		}
+Here, we use `BaseSystem.InjectComponent`, which registers a component and assigns a component factory to the given destination.
+```golang
+func (m *MovementSystem) setupComponents() {
+    m.InjectComponent(&Position{}, &m.components.Position.ComponentFactory)
+    m.InjectComponent(&Velocity{}, &m.components.Velocity.ComponentFactory)
+}
+```
+
+Here, we set up our only subscription. For this example, our `MovementSystem` is interested in
+`Position` and `Velocity` components.
+```golang
+func (m *MovementSystem) setupSubscriptions() {
+    filterBuilder := m.NewComponentFilter()
+    
+    filterBuilder.Require(&Position{})
+    filterBuilder.Require(&Velocity{})
+
+    filter := filterBuilder.Build()
+
+	m.movingEntities = m.World.AddSubscription(filter)
+}
+```
+
+Our `Update` method is simple; we iterate over entities that are in our subscription. 
+Remember, as components are added and removed from entities, _all subscriptions are updated_.
+```golang
+func (m *MovementSystem) Update() {
+	for _, eid := range m.movingEntities.GetEntities() {
+        m.moveEntity(eid)
 	}
 }
+```
 
-// ProcessEntity updates an individual entity in the movement system
-func (m *MovementSystem) ProcessEntity(id akara.EID) {
-	position, found := m.positions.GetPosition(id)
+This is where our system actually does work. For the given incoming entity id, we retreive 
+the position and velocity components and apply the velocity to the position. If either of those 
+components does not exist for the entity, we return. 
+```golang
+func (m *MovementSystem) moveEntity(id akara.EID) {
+	position, found := m.components.positions.Get(id)
 	if !found {
 		return
 	}
 
-	velocity, found := m.velocities.GetVelocity(id)
+	velocity, found := m.components.velocities.Get(id)
 	if !found {
 		return
 	}
 
 	s := float64(m.World.TimeDelta) / float64(time.Second)
-	position.Vector = *position.Vector.Add(velocity.Vector.Clone().Scale(s))
-}
-```
-
-**System Factory Function**
-```golang
-// NewMovementSystem creates a movement system
-func NewMovementSystem() *MovementSystem {
-	cfg := akara.NewFilter().Require(components.Position, components.Velocity)
-
-	filter := cfg.Build()
-
-	return &MovementSystem{
-		SubscriberSystem: akara.NewSubscriberSystem(filter),
-	}
+	position.Vector.Add(velocity.Vector.Clone().Scale(s))
 }
 ```
 
@@ -372,17 +383,4 @@ var _ akara.System = &MovementSystem{}
 ```golang
 // static check that PositionComponent implements Component
 var _ akara.Component = &PositionComponent{}
-```
-```golang
-// static check that PositionMap implements ComponentMap
-var _ akara.ComponentMap = &PositionMap{}
-```
-
-#### Creating a world
-```golang
-cfg := akara.NewWorldConfig() // make a world config
-
-cfg.With(NewMovementSystem()) // add the system
-
-world := akara.NewWorld(cfg) // initialize the world with the config
 ```
