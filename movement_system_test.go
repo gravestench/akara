@@ -38,7 +38,11 @@ func Test_ExampleMovementSystem(t *testing.T) {
 
 	for numUpdates > 0 {
 		fmt.Print("\nUpdate...\n")
-		world.Update(updateInterval)
+		err := world.Update(updateInterval)
+		if err != nil {
+			t.Errorf("failed to update world: %s", err)
+			t.Fail()
+		}
 		numUpdates--
 	}
 }
@@ -55,7 +59,7 @@ func BenchmarkExampleMovementSystem(b *testing.B) {
 
 	for _, n := range tests {
 		name := fmt.Sprintf("%d entities", n)
-		b.Run(name, func(b *testing.B){
+		b.Run(name, func(b *testing.B) {
 			Bench_ExampleMovementSystemN(n, b)
 		})
 	}
@@ -82,7 +86,11 @@ func Bench_ExampleMovementSystemN(numEntities int, b *testing.B) {
 	const updateInterval = time.Second
 
 	for numUpdates > 0 {
-		world.Update(updateInterval)
+		err := world.Update(updateInterval)
+		if err != nil {
+			b.Errorf("failed to update world: %s", err)
+			b.Fail()
+		}
 		numUpdates--
 	}
 }
@@ -96,7 +104,7 @@ type MovementSystem struct {
 	PositionFactory
 	VelocityFactory
 	movableEntities *Subscription
-	disableLog bool
+	disableLog      bool
 }
 
 // Init initializes the system with the given world
@@ -144,14 +152,13 @@ func (m *MovementSystem) move(id EID) {
 	newY := p.Y + (v.Y * s)
 
 	const strFmt = "p(%+.0f, %+.0f) + v(%+.0f, %+.0f)@%.0fs => p(%+.0f, %+.0f)\n"
-	if !m.disableLog{
+	if !m.disableLog {
 		fmt.Printf(strFmt, p.X, p.Y, v.X, v.Y, s, newX, newY)
 	}
 
 	p.X = newX
 	p.Y = newY
 }
-
 
 // static check that Velocity implements Component
 var _ Component = &Velocity{}
