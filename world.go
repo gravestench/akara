@@ -42,11 +42,15 @@ type World struct {
 	factories   componentFactories
 	Systems     []System
 	removeQueue []System
+	mutex       sync.Mutex
 }
 
 // RegisterComponent registers a component type, assigning and returning its component ID
 func (w *World) RegisterComponent(c Component) ComponentID {
 	name := strings.ToLower(reflect.TypeOf(c).Elem().Name())
+
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
 
 	id, found := w.registry[name]
 	if found {
@@ -75,6 +79,9 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 }
 
 func (w *World) GetComponentFactory(id ComponentID) *ComponentFactory {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	return w.factories[id]
 }
 
@@ -90,9 +97,13 @@ func (w *World) NewComponentFilter() *ComponentFilterBuilder {
 
 // AddSystem adds a system to the world
 func (w *World) AddSystem(s System) *World {
+	w.mutex.Lock()
+
 	w.Systems = append(w.Systems, s)
 
 	s.SetActive(true)
+
+	w.mutex.Unlock()
 
 	if baseContainer, ok := s.(hasBaseSystem); ok {
 		baseContainer.Base().World = w
@@ -114,12 +125,18 @@ func (w *World) AddSystem(s System) *World {
 
 // RemoveSystem queues the given system for removal
 func (w *World) RemoveSystem(s System) *World {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	w.removeQueue = append(w.removeQueue, s)
 
 	return w
 }
 
 func (w *World) processRemoveQueue() {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
 	for remIdx := range w.removeQueue {
 		for idx := range w.Systems {
 			if w.Systems[idx] == w.removeQueue[remIdx] {

@@ -1,5 +1,7 @@
 package akara
 
+import "sync"
+
 // NewSubscription creates a new subscription with the given component filter
 func NewSubscription(cf *ComponentFilter) *Subscription {
 	return &Subscription{
@@ -15,10 +17,14 @@ type Subscription struct {
 	entityBitVector *BitSet
 	entities        []EID
 	dirty           bool
+	mutex           sync.Mutex
 }
 
 // GetEntities returns the entities for the system
 func (s *Subscription) GetEntities() []EID {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
 	if s.entityBitVector.Empty() {
 		return []EID{}
 	}
