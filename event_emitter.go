@@ -10,7 +10,6 @@ func NewEventEmitter() *EventEmitter {
 	return ee
 }
 
-
 type EventEmitter struct {
 	listeners map[string][]*EventListener
 	count     int
@@ -78,6 +77,7 @@ func (ee *EventEmitter) removeListener(event string, fn func(...interface{})) {
 	}
 }
 
+// nolint:unused // not used by anything within the package
 func (ee *EventEmitter) eventNames() []string {
 	names := make([]string, len(ee.listeners))
 
@@ -91,6 +91,7 @@ func (ee *EventEmitter) eventNames() []string {
 	return names
 }
 
+// nolint:unused // not used by anything within the package
 func (ee *EventEmitter) clearEvent(event string) {
 	ee.count--
 	if ee.count <= 0 {
@@ -103,19 +104,19 @@ func (ee *EventEmitter) clearEvent(event string) {
 	delete(ee.listeners, event)
 }
 
+// nolint:unused // not used by anything within the package
 func (ee *EventEmitter) getHandlers(event string) []func(...interface{}) {
 	handlers := make([]func(...interface{}), 0)
 	listeners := ee.listeners[event]
 
-	if listeners != nil {
-		for idx := range listeners {
-			handlers = append(handlers, listeners[idx].fn)
-		}
+	for idx := range listeners {
+		handlers = append(handlers, listeners[idx].fn)
 	}
 
 	return handlers
 }
 
+// nolint:unused // not used by anything within the package
 func (ee *EventEmitter) getHandlerCount(event string) int {
 	if ee.listeners == nil {
 		return 0
@@ -129,6 +130,7 @@ func (ee *EventEmitter) getHandlerCount(event string) int {
 	return len(listeners)
 }
 
+// nolint:unused // not used by anything within the package
 func (ee *EventEmitter) removeAllListeners(events ...string) {
 	if events != nil {
 		if len(events) > 0 {
@@ -140,5 +142,5 @@ func (ee *EventEmitter) removeAllListeners(events ...string) {
 		return
 	}
 
-	ee.listeners = make(map[string][]*EventListener, 0)
+	ee.listeners = make(map[string][]*EventListener)
 }
