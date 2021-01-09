@@ -1,6 +1,7 @@
 package akara
 
 import (
+	"sync"
 	"sync/atomic"
 )
 
@@ -26,6 +27,7 @@ type EntityManager struct {
 	nextEntityID   EID
 	ComponentFlags map[EID]*BitSet
 	Subscriptions  []*Subscription
+	mutex          sync.Mutex
 }
 
 // AddSubscription will look for an identical component filter and return an existing
@@ -72,6 +74,9 @@ func (em *EntityManager) NewEntity() EID {
 
 // RemoveEntity removes an entity
 func (em *EntityManager) RemoveEntity(id EID) {
+	em.mutex.Lock()
+	defer em.mutex.Unlock()
+
 	for subIdx := range em.Subscriptions {
 		for entIdx := range em.Subscriptions[subIdx].entities {
 			if em.Subscriptions[subIdx].entities[entIdx] == id {
@@ -89,7 +94,7 @@ func (em *EntityManager) RemoveEntity(id EID) {
 
 // UpdateComponentFlags updates the component bitset for the entity.
 // The bitset just says which components an entity currently has.
-func (em *EntityManager) UpdateComponentFlags(id EID) {
+func (em *EntityManager) updateComponentFlags(id EID) {
 	// for each component map ...
 	for idx := range em.world.factories {
 		// ... check if the entity has a component in this component map ...
@@ -104,11 +109,16 @@ func (em *EntityManager) UpdateComponentFlags(id EID) {
 // UpdateSubscriptions will iterate through all subscriptions and add the entity id
 // to the subscription if the entity can pass through the subscription filter
 func (em *EntityManager) UpdateSubscriptions(id EID) {
-	em.UpdateComponentFlags(id)
+	em.mutex.Lock()
+	defer em.mutex.Unlock()
+
+	em.updateComponentFlags(id)
 
 	for idx := range em.Subscriptions {
+		em.Subscriptions[idx].mutex.Lock()
 		allowed := em.Subscriptions[idx].Filter.Allow(em.ComponentFlags[id])
 		em.Subscriptions[idx].dirty = true
 		em.Subscriptions[idx].entityBitVector.Set(int(id), allowed)
+		em.Subscriptions[idx].mutex.Unlock()
 	}
 }
