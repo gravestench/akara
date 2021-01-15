@@ -116,9 +116,13 @@ func (em *EntityManager) UpdateSubscriptions(id EID) {
 
 	for idx := range em.Subscriptions {
 		em.Subscriptions[idx].mutex.Lock()
-		allowed := em.Subscriptions[idx].Filter.Allow(em.ComponentFlags[id])
-		em.Subscriptions[idx].dirty = true
-		em.Subscriptions[idx].entityBitVector.Set(int(id), allowed)
+
+		if em.Subscriptions[idx].Filter.Allow(em.ComponentFlags[id]) {
+			em.Subscriptions[idx].AddEntity(id)
+		} else {
+			em.Subscriptions[idx].RemoveEntity(id)
+		}
+
 		em.Subscriptions[idx].mutex.Unlock()
 	}
 }
