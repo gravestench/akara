@@ -62,12 +62,6 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 	factory := newComponentFactory(nextID)
 	factory.world = w
 
-	factory.ComponentMap = &ComponentMap{
-		mux:       &sync.Mutex{},
-		base:      factory,
-		instances: make(map[EID]Component),
-	}
-
 	factory.provider = func() Component {
 		return c.New()
 	}
