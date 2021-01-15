@@ -3,9 +3,10 @@ package akara
 import "math"
 
 const (
-	shift6   = 6
-	overflow = 1 << shift6
-	mask     = overflow - 1 // 0x3f // 0b111111 // 63
+	shift6       = 6
+	overflow     = 1 << shift6
+	mask         = overflow - 1 // 0x3f // 0b111111 // 63
+	bitsPerGroup = 64
 )
 
 func NewBitSet(indicesToSetTrue ...int) *BitSet {
@@ -85,7 +86,9 @@ func (bs *BitSet) Set(idx int, b bool) {
 
 // Clear will clear all of the bits in the bitset
 func (bs *BitSet) Clear() {
-	bs.groups = make([]uint64, 0)
+	for idx := range bs.groups {
+		bs.groups[idx] = 0
+	}
 }
 
 // Clone creates a copy of the BitSet
@@ -108,9 +111,18 @@ func (bs *BitSet) Invert() *BitSet {
 
 // And performs a bitwise AND against the argument bitset (mutates the bitset!)
 func (bs *BitSet) And(other *BitSet) *BitSet {
-	commonLength := int(math.Min(float64(len(bs.groups)), float64(len(other.groups))))
+	maxLen := int(math.Max(float64(len(bs.groups)), float64(len(other.groups))))
 
-	for idx := commonLength - 1; idx >= 0; idx-- {
+	if len(bs.groups) != maxLen {
+		bs.Set(maxLen*bitsPerGroup-1, false)
+	}
+
+	if len(other.groups) != maxLen {
+		other.Set(maxLen*bitsPerGroup-1, false)
+	}
+
+	commonLen := int(math.Min(float64(len(bs.groups)), float64(len(other.groups))))
+	for idx := commonLen - 1; idx >= 0; idx-- {
 		bs.groups[idx] &= other.groups[idx]
 	}
 
@@ -120,6 +132,10 @@ func (bs *BitSet) And(other *BitSet) *BitSet {
 // Or performs a bitwise OR against the argument bitset (mutates the bitset!)
 func (bs *BitSet) Or(other *BitSet) *BitSet {
 	commonLength := int(math.Min(float64(len(bs.groups)), float64(len(other.groups))))
+
+	if bs.groups == nil || len(bs.groups) == 0 {
+		bs.groups = other.Clone().groups
+	}
 
 	for idx := commonLength - 1; idx >= 0; idx-- {
 		bs.groups[idx] |= other.groups[idx]
@@ -159,6 +175,10 @@ func (bs *BitSet) NotEmpty() bool {
 func (bs *BitSet) ContainsAll(other *BitSet) bool {
 	if other.Empty() {
 		return true
+	}
+
+	if bs.Empty() {
+		return false
 	}
 
 	if bs.Empty() {
@@ -228,7 +248,7 @@ func (bs *BitSet) Equals(other *BitSet) bool {
 		return false
 	}
 
-	if bs == nil && other == nil {
+	if (bs == nil && other == nil) || (bs.Empty() && other.Empty()){
 		return true
 	}
 
