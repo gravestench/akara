@@ -18,13 +18,13 @@ type WorldConfig struct {
 // With is used to add either systems or component maps.
 //
 // Examples:
-// 	builder.With(system)
-// 	builder.With(componentMap)
+// 	builder.With(&system{})
+// 	builder.With(&component{})
 //
 //	builder.
-//		With(movementSystem).
-//		With(velocityMap).
-//		With(positionMap)
+//		With(&movementSystem{}).
+//		With(&velocity{}).
+//		With(&position{})
 func (b *WorldConfig) With(arg interface{}) *WorldConfig {
 	switch entry := arg.(type) {
 	case System:

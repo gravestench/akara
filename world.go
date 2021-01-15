@@ -72,6 +72,7 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 	return factory.id
 }
 
+// GetComponentFactory returns the ComponentFactory for the given ComponentID
 func (w *World) GetComponentFactory(id ComponentID) *ComponentFactory {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
