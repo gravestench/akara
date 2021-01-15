@@ -1,6 +1,10 @@
 package akara
 
-import "testing"
+import (
+	"fmt"
+	"math"
+	"testing"
+)
 
 func TestBitSet_Get(t *testing.T) {
 	bs := NewBitSet()
@@ -32,6 +36,24 @@ func TestBitSet_Get(t *testing.T) {
 	}
 }
 
+func benchBitsetGet(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs1.Set(i, true)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.Get(i)
+	}
+}
+
+func BenchmarkBitSet_Get(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.Get %d bits", v), func(b *testing.B) {
+			benchBitsetGet(v, b)
+		})
+	}
+}
+
 func TestBitSet_Or(t *testing.T) {
 	bs1 := NewBitSet()
 	bs1.Set(8, false)
@@ -44,6 +66,24 @@ func TestBitSet_Or(t *testing.T) {
 
 	if !bs2.Get(1) || !bs2.Get(8) {
 		t.Error("Bitset OR operation failed")
+	}
+}
+
+func benchBitsetOr(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs2 := NewBitSet(i)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.Or(bs2)
+	}
+}
+
+func BenchmarkBitSet_Or(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.Or %d bits", v), func(b *testing.B) {
+			benchBitsetOr(v, b)
+		})
 	}
 }
 
@@ -61,6 +101,24 @@ func TestBitSet_And(t *testing.T) {
 
 	if bs2.Get(0) || !bs2.Get(1) || !bs2.Get(8) {
 		t.Error("Bitset AND operation failed")
+	}
+}
+
+func benchBitsetAnd(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs2 := NewBitSet(i)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.And(bs2)
+	}
+}
+
+func BenchmarkBitSet_And(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.And %d bits", v), func(b *testing.B) {
+			benchBitsetAnd(v, b)
+		})
 	}
 }
 
@@ -84,6 +142,24 @@ func TestBitSet_ContainsAll(t *testing.T) {
 
 	if bs2.ContainsAll(bs1) {
 		t.Error("sub-set does not contain super-set")
+	}
+}
+
+func benchBitsetContainsAll(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs2 := NewBitSet(i)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.ContainsAll(bs2)
+	}
+}
+
+func BenchmarkBitSet_ContainsAll(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.ContainsAll %d bits", v), func(b *testing.B) {
+			benchBitsetContainsAll(v, b)
+		})
 	}
 }
 
@@ -112,6 +188,25 @@ func TestBitSet_Intersects(t *testing.T) {
 	}
 }
 
+func benchBitsetIntersects(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs2 := NewBitSet(i)
+
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.Intersects(bs2)
+	}
+}
+
+func BenchmarkBitSet_Intersects(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.Intersects %d bits", v), func(b *testing.B) {
+			benchBitsetIntersects(v, b)
+		})
+	}
+}
+
 func TestBitSet_Equals(t *testing.T) {
 	bs1 := NewBitSet(1, 2, 4, 8)
 	bs2 := bs1.Clone()
@@ -127,6 +222,24 @@ func TestBitSet_Equals(t *testing.T) {
 	}
 }
 
+func benchBitsetEquals(i int, b *testing.B) {
+	bs1 := NewBitSet(i)
+	bs2 := NewBitSet(i)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs1.Equals(bs2)
+	}
+}
+
+func BenchmarkBitSet_Equals(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.Equals %d bits", v), func(b *testing.B) {
+			benchBitsetEquals(v, b)
+		})
+	}
+}
+
 func TestBitSet_ToIntArray(t *testing.T) {
 	bs1 := NewBitSet(1, 2, 4, 8, 64)
 
@@ -134,5 +247,22 @@ func TestBitSet_ToIntArray(t *testing.T) {
 
 	if len(a) != 5 {
 		t.Error("unexpected indices in result int array")
+	}
+}
+
+func benchBitsetToIntArray(i int, b *testing.B) {
+	bs := NewBitSet(i)
+	b.ResetTimer()
+	for n := 0; n < b.N; n++ {
+		bs.ToIntArray()
+	}
+}
+
+func BenchmarkBitSet_ToIntArray(b *testing.B) {
+	for i := 2; i < 10; i++ {
+		v := int(math.Pow10(i))
+		b.Run(fmt.Sprintf("Bitset.ToIntArray %d bits", v), func(b *testing.B) {
+			benchBitsetToIntArray(v, b)
+		})
 	}
 }
