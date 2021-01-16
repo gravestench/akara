@@ -53,7 +53,7 @@ func (b *BaseSubscriberSystem) AddSubscription(s interface{}) *Subscription {
 		b.Subscriptions = make(subscriptions)
 	}
 
-	sub := b.world.AddSubscription(filter)
+	sub := b.World.AddSubscription(filter)
 	b.Subscriptions[sub.Filter] = sub
 
 	return sub
