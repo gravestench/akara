@@ -63,6 +63,51 @@ func Test_EventEmitter_On(t *testing.T) {
 	}
 }
 
+func Test_EventEmitter_Once(t *testing.T) {
+	rand.Seed(time.Now().UnixNano())
+
+	ee := NewEventEmitter()
+
+	eventX := "x only"
+	eventY := "y only"
+
+	var x, y int
+
+	ee.Once(eventX, func(args ...interface{}) {
+		x++
+	})
+
+	ee.Once(eventY, func(args ...interface{}) {
+		y++
+	})
+
+	ee.On(eventY, func(args ...interface{}) {
+		y++
+	})
+
+	ee.Emit(eventX)
+
+	if x != 1 {
+		t.Error("listener function not called")
+	}
+
+	if y != 0 {
+		t.Error("listener function incorrectly called")
+	}
+
+	ee.Emit(eventY)
+	ee.Emit(eventY)
+	ee.Emit(eventY)
+
+	if x != 1 {
+		t.Error("listener function incorrectly called")
+	}
+
+	if y != 4 {
+		t.Error("listener function incorrectly called")
+	}
+}
+
 func Benchmark_EventEmitter(b *testing.B) {
 	rand.Seed(time.Now().UnixNano())
 
