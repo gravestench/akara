@@ -22,15 +22,17 @@ func (ee *EventEmitter) Emit(event string, args ...interface{}) {
 		return
 	}
 
-	for idx := range listeners {
+	for idx := 0; idx < len(listeners); idx++ {
 		if listeners[idx].fn != nil {
 			listeners[idx].fn(args...)
 		}
 
 		if listeners[idx].once {
 			listeners = append(listeners[:idx], listeners[idx+1:]...)
+			idx--
 		}
 	}
+	ee.listeners[event] = listeners
 }
 
 func (ee *EventEmitter) On(event string, fn func(...interface{})) {
