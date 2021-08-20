@@ -8,14 +8,14 @@ func NewWorldConfig() *WorldConfig {
 	}
 }
 
-// WorldConfig is used to declare systems and component mappers.
+// WorldConfig is used to declare Systems and component mappers.
 // This is to be passed to a World factory function.
 type WorldConfig struct {
 	systems    []System
 	components []Component
 }
 
-// With is used to add either systems or component maps.
+// With is used to add either Systems or component maps.
 //
 // Examples:
 // 	builder.With(&system{})

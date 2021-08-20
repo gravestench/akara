@@ -23,7 +23,7 @@ func NewWorld(cfg *WorldConfig) *World {
 			factories:   make(componentFactories),
 		},
 		systemManagement: &systemManagement{
-			systems:     make([]System, 0),
+			Systems:     make([]System, 0),
 			removeQueue: make([]System, 0),
 		},
 		Events:      NewEventEmitter(),
@@ -52,11 +52,11 @@ type entityManagement struct {
 }
 
 type systemManagement struct {
-	systems     []System
+	Systems     []System
 	removeQueue []System
 }
 
-// World contains all of the Entities, Components, and systems
+// World contains all of the Entities, Components, and Systems
 type World struct {
 	TimeDelta   time.Duration
 	Events      *EventEmitter
@@ -115,7 +115,7 @@ func (w *World) NewComponentFilter() *ComponentFilterBuilder {
 func (w *World) AddSystem(s System) *World {
 	w.mutex.Lock()
 
-	w.systems = append(w.systems, s)
+	w.Systems = append(w.Systems, s)
 
 	s.SetActive(true)
 
@@ -154,9 +154,9 @@ func (w *World) processRemoveQueue() {
 	defer w.mutex.Unlock()
 
 	for remIdx := range w.removeQueue {
-		for idx := range w.systems {
-			if w.systems[idx] == w.removeQueue[remIdx] {
-				w.systems = append(w.systems[:idx], w.systems[idx+1:]...)
+		for idx := range w.Systems {
+			if w.Systems[idx] == w.removeQueue[remIdx] {
+				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
 				break
 			}
 		}
@@ -169,21 +169,31 @@ func (w *World) UpdateEntity(id EID) {
 	w.updateSubscriptions(id)
 }
 
-// Update iterates through all systems and calls the update method if the system is active
+// Update iterates through all Systems and calls the update method if the system is active
 func (w *World) Update(dt time.Duration) error {
 	w.TimeDelta = dt
 
-	for sysIdx := range w.systems {
-		if !w.systems[sysIdx].Active() {
+	for sysIdx := range w.Systems {
+		if !w.Systems[sysIdx].Active() {
 			continue
 		}
 
-		updater, ok := w.systems[sysIdx].(SystemUpdater)
-		if !ok {
+		if sys, ok := w.Systems[sysIdx].(SystemInitializer); ok {
+			if !sys.IsInitialized() {
+				sys.Init(w)
+				continue
+			}
+		}
+
+		if sys, ok := w.Systems[sysIdx].(SystemUpdater); ok {
+			sys.Update()
 			continue
 		}
 
-		updater.Update()
+		if sys, ok := w.Systems[sysIdx].(SystemUpdaterTimed); ok {
+			sys.Update(dt)
+			continue
+		}
 	}
 
 	w.processRemoveQueue()

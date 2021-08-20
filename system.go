@@ -1,5 +1,7 @@
 package akara
 
+import "time"
+
 // System describes the bare minimum of what is considered a system
 type System interface {
 	Active() bool
@@ -11,9 +13,15 @@ type System interface {
 type SystemInitializer interface {
 	System
 	Init(*World)
+	IsInitialized() bool
 }
 
 type SystemUpdater interface {
 	System
 	Update()
+}
+
+type SystemUpdaterTimed interface {
+	System
+	Update(time.Duration)
 }
