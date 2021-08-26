@@ -9,6 +9,11 @@ type System interface {
 	Destroy()
 }
 
+type baseSystem interface {
+	System
+	bind(*World)
+}
+
 // SystemInitializer is a system with an Init method
 type SystemInitializer interface {
 	System

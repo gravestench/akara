@@ -18,6 +18,10 @@ type BaseSystem struct {
 	active bool
 }
 
+func (s *BaseSystem) bind(world *World) {
+	s.World = world
+}
+
 func (s *BaseSystem) Base() *BaseSystem {
 	return s
 }

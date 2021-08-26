@@ -180,6 +180,10 @@ func (w *World) Update(dt time.Duration) error {
 
 		if sys, ok := w.Systems[sysIdx].(SystemInitializer); ok {
 			if !sys.IsInitialized() {
+				if base, ok := sys.(baseSystem); ok {
+					base.bind(w)
+				}
+
 				sys.Init(w)
 				continue
 			}
