@@ -2,7 +2,6 @@ package akara
 
 func NewBaseSystem() *BaseSystem {
 	return &BaseSystem{
-		Events: NewEventEmitter(),
 		active: true,
 	}
 }
@@ -14,7 +13,6 @@ type hasBaseSystem interface {
 // BaseSystem is the base system type
 type BaseSystem struct {
 	*World
-	Events *EventEmitter
 	active bool
 }
 
