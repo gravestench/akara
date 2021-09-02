@@ -55,5 +55,40 @@ func TestWorld_RemoveEntity(t *testing.T) {
 
 			So(len(w.ComponentFlags), ShouldEqual, 0)
 		})
+
+		Convey("An entity which is removed is also removed from all subscriptions", func() {
+			cid := w.RegisterComponent(&testComponent{})
+			testComponentFactory := &testComponentFactory{ComponentFactory: w.GetComponentFactory(cid)}
+
+			sub := w.AddSubscription(w.NewComponentFilter().Require(&testComponent{}).Build())
+
+			e := w.NewEntity()
+			testComponentFactory.Add(e)
+
+			So(len(sub.GetEntities()), ShouldEqual, 1)
+
+			w.RemoveEntity(e)
+			w.Update(0)
+
+			So(len(sub.GetEntities()), ShouldEqual, 0)
+		})
 	})
 }
+
+type testComponentFactory struct {
+	*ComponentFactory
+}
+
+func (m *testComponentFactory) Add(id EID) *testComponent {
+	return m.ComponentFactory.Add(id).(*testComponent)
+}
+
+func (m *testComponentFactory) Get(id EID) (*testComponent, bool) {
+	component, found := m.ComponentFactory.Get(id)
+	if !found {
+		return nil, found
+	}
+
+	return component.(*testComponent), found
+}
+

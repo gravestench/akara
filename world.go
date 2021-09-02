@@ -26,7 +26,6 @@ func NewWorld(cfg *WorldConfig) *World {
 			Systems:     make([]System, 0),
 			removeQueue: make([]System, 0),
 		},
-		Events:      NewEventEmitter(),
 	}
 
 	for _, system := range cfg.systems {
@@ -59,7 +58,6 @@ type systemManagement struct {
 // World contains all of the Entities, Components, and Systems
 type World struct {
 	TimeDelta   time.Duration
-	Events      *EventEmitter
 	*entityManagement
 	*componentManagement
 	*systemManagement
