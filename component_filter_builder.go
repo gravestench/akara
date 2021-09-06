@@ -1,5 +1,7 @@
 package akara
 
+import "github.com/gravestench/bitset"
+
 // ComponentFilterBuilder creates a component filter config
 type ComponentFilterBuilder struct {
 	world      *World
@@ -9,7 +11,7 @@ type ComponentFilterBuilder struct {
 }
 
 func (cfb *ComponentFilterBuilder) Build() *ComponentFilter {
-	bs := NewBitSet()
+	bs := bitset.NewBitSet()
 	f := &ComponentFilter{}
 
 	for idx := range cfb.require {

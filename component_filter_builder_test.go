@@ -3,12 +3,14 @@ package akara
 import (
 	"testing"
 
+	"github.com/gravestench/bitset"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestComponentFilterBuilder(t *testing.T) {
 	Convey("Given an Arbitrary BitSet", t, func() {
-		bs := NewBitSet()
+		bs := bitset.NewBitSet()
 
 		Convey("A component filter may be created with any combination of requirements/restrictions", func () {
 			So(NewComponentFilter(bs, nil, nil), ShouldNotBeNil)

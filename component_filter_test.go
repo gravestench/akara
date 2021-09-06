@@ -2,6 +2,7 @@ package akara
 
 import (
 	"fmt"
+	"github.com/gravestench/bitset"
 	"math"
 	"math/rand"
 	"testing"
@@ -28,8 +29,8 @@ func randIndices(max int) []int {
 
 func TestComponentFilter_Allow(t *testing.T) {
 	Convey("With BitSets A and B, Where true bits in A are a subset of the true bits in B", t, func() {
-		A := NewBitSet(1, 2, 3)
-		B := NewBitSet(1, 2, 3, 4)
+		A := bitset.NewBitSet(1, 2, 3)
+		B := bitset.NewBitSet(1, 2, 3, 4)
 
 		Convey("Where the filter imposes no requirements or restrictions", func () {
 			cf := NewComponentFilter(nil, nil, nil)
@@ -67,8 +68,8 @@ func TestComponentFilter_Allow(t *testing.T) {
 }
 
 func TestComponentFilter_Equals(t *testing.T) {
-	bs1 := NewBitSet(1, 2, 3)
-	bs2 := NewBitSet(1, 2, 3, 4)
+	bs1 := bitset.NewBitSet(1, 2, 3)
+	bs2 := bitset.NewBitSet(1, 2, 3, 4)
 
 	cf1 := NewComponentFilter(bs1, nil, nil)
 
@@ -81,15 +82,15 @@ func benchComponentFilterAllow(i int, b *testing.B) {
 	rand.Seed(int64(0xdeadbeef))
 
 	// this setup can be expensive, we do this first...
-	bs1 := NewBitSet(randIndices(i)...)
-	bs2 := NewBitSet(randIndices(i)...)
-	bs3 := NewBitSet(randIndices(i)...)
+	bs1 := bitset.NewBitSet(randIndices(i)...)
+	bs2 := bitset.NewBitSet(randIndices(i)...)
+	bs3 := bitset.NewBitSet(randIndices(i)...)
 	cf1 := NewComponentFilter(bs1, bs2, bs3)
 
 	// ... then we need to reset the timer...
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		cf1.Allow(NewBitSet(randIndices(i)...))
+		cf1.Allow(bitset.NewBitSet(randIndices(i)...))
 	}
 }
 
@@ -105,12 +106,12 @@ func BenchmarkComponentFilter_Allow(b *testing.B) {
 func benchComponentFilterEquals(i int, b *testing.B) {
 	rand.Seed(int64(0xdeadbeef))
 
-	bs1 := NewBitSet(randIndices(i)...)
-	bs2 := NewBitSet(randIndices(i)...)
-	bs3 := NewBitSet(randIndices(i)...)
-	bs4 := NewBitSet(randIndices(i)...)
-	bs5 := NewBitSet(randIndices(i)...)
-	bs6 := NewBitSet(randIndices(i)...)
+	bs1 := bitset.NewBitSet(randIndices(i)...)
+	bs2 := bitset.NewBitSet(randIndices(i)...)
+	bs3 := bitset.NewBitSet(randIndices(i)...)
+	bs4 := bitset.NewBitSet(randIndices(i)...)
+	bs5 := bitset.NewBitSet(randIndices(i)...)
+	bs6 := bitset.NewBitSet(randIndices(i)...)
 
 	cf1 := NewComponentFilter(bs1, bs2, bs3)
 	cf2 := NewComponentFilter(bs4, bs5, bs6)

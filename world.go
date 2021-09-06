@@ -1,6 +1,7 @@
 package akara
 
 import (
+	"github.com/gravestench/bitset"
 	"reflect"
 	"strings"
 	"sync"
@@ -15,7 +16,7 @@ type componentFactories = map[ComponentID]*ComponentFactory
 func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
-			ComponentFlags: make(map[EID]*BitSet),
+			ComponentFlags: make(map[EID]*bitset.BitSet),
 			Subscriptions: make([]*Subscription, 0),
 		},
 		componentManagement: &componentManagement{
@@ -46,7 +47,7 @@ type componentManagement struct {
 
 type entityManagement struct {
 	nextEntityID   EID
-	ComponentFlags map[EID]*BitSet // bitset for each entity, shows what components the entity has
+	ComponentFlags map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
 	Subscriptions  []*Subscription
 }
 
@@ -253,7 +254,7 @@ func (w *World) AddSubscription(input interface{}) *Subscription {
 // NewEntity creates a new entity and Component BitSet
 func (w *World) NewEntity() EID {
 	atomic.AddUint64(&w.nextEntityID, 1)
-	w.ComponentFlags[w.nextEntityID] = &BitSet{}
+	w.ComponentFlags[w.nextEntityID] = &bitset.BitSet{}
 
 	return w.nextEntityID
 }

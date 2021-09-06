@@ -1,6 +1,8 @@
 package akara
 
-func NewComponentFilter(all, oneOf, none *BitSet) *ComponentFilter {
+import "github.com/gravestench/bitset"
+
+func NewComponentFilter(all, oneOf, none *bitset.BitSet) *ComponentFilter {
 	return &ComponentFilter{
 		all,
 		oneOf,
@@ -10,9 +12,9 @@ func NewComponentFilter(all, oneOf, none *BitSet) *ComponentFilter {
 
 // ComponentFilter describes the component requirements of entities
 type ComponentFilter struct {
-	Required    *BitSet
-	OneRequired *BitSet
-	Forbidden   *BitSet
+	Required    *bitset.BitSet
+	OneRequired *bitset.BitSet
+	Forbidden   *bitset.BitSet
 }
 
 // Equals checks if this component filter is equal to the argument component filter
@@ -23,7 +25,7 @@ func (cf *ComponentFilter) Equals(other *ComponentFilter) bool {
 }
 
 // Allow returns true if the given bitset is not rejected by the component filter
-func (cf *ComponentFilter) Allow(other *BitSet) bool {
+func (cf *ComponentFilter) Allow(other *bitset.BitSet) bool {
 	if cf == nil {
 		return false
 	}
