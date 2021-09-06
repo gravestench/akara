@@ -42,6 +42,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			e := w.NewEntity()
 
 			w.RemoveEntity(e)
+			w.Update(0)
 
 			So(len(w.ComponentFlags), ShouldEqual, 0)
 		})
@@ -52,6 +53,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
+			w.Update(0)
 
 			So(len(w.ComponentFlags), ShouldEqual, 0)
 		})

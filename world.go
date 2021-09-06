@@ -17,15 +17,16 @@ func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
 			ComponentFlags: make(map[EID]*bitset.BitSet),
-			Subscriptions: make([]*Subscription, 0),
+			Subscriptions:  make([]*Subscription, 0),
+			entityRemovalQueue: make([]EID, 0),
 		},
 		componentManagement: &componentManagement{
-			registry:    make(componentRegistry),
-			factories:   make(componentFactories),
+			registry:  make(componentRegistry),
+			factories: make(componentFactories),
 		},
 		systemManagement: &systemManagement{
-			Systems:     make([]System, 0),
-			removeQueue: make([]System, 0),
+			Systems:            make([]System, 0),
+			systemRemovalQueue: make([]System, 0),
 		},
 	}
 
@@ -41,24 +42,25 @@ func NewWorld(cfg *WorldConfig) *World {
 }
 
 type componentManagement struct {
-	registry    componentRegistry
-	factories   componentFactories
+	registry  componentRegistry
+	factories componentFactories
 }
 
 type entityManagement struct {
-	nextEntityID   EID
-	ComponentFlags map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
-	Subscriptions  []*Subscription
+	nextEntityID       EID
+	ComponentFlags     map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
+	Subscriptions      []*Subscription
+	entityRemovalQueue []EID
 }
 
 type systemManagement struct {
-	Systems     []System
-	removeQueue []System
+	Systems            []System
+	systemRemovalQueue []System
 }
 
 // World contains all of the Entities, Components, and Systems
 type World struct {
-	TimeDelta   time.Duration
+	TimeDelta time.Duration
 	*entityManagement
 	*componentManagement
 	*systemManagement
@@ -143,7 +145,7 @@ func (w *World) RemoveSystem(s System) *World {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	w.removeQueue = append(w.removeQueue, s)
+	w.systemRemovalQueue = append(w.systemRemovalQueue, s)
 
 	return w
 }
@@ -152,13 +154,29 @@ func (w *World) processRemoveQueue() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	for remIdx := range w.removeQueue {
+	for remIdx := range w.systemRemovalQueue {
 		for idx := range w.Systems {
-			if w.Systems[idx] == w.removeQueue[remIdx] {
+			if w.Systems[idx] == w.systemRemovalQueue[remIdx] {
 				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
 				break
 			}
 		}
+	}
+
+	for _, id := range w.entityRemovalQueue {
+		for subIdx := range w.Subscriptions {
+			for entIdx := range w.Subscriptions[subIdx].entities {
+				if w.Subscriptions[subIdx].entities[entIdx] == id {
+					w.Subscriptions[subIdx].entities = append(
+						w.Subscriptions[subIdx].entities[:entIdx],
+						w.Subscriptions[subIdx].entities[entIdx+1:]...,
+					)
+					break
+				}
+			}
+		}
+
+		delete(w.ComponentFlags, id)
 	}
 }
 
@@ -264,19 +282,8 @@ func (w *World) RemoveEntity(id EID) {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	for subIdx := range w.Subscriptions {
-		for entIdx := range w.Subscriptions[subIdx].entities {
-			if w.Subscriptions[subIdx].entities[entIdx] == id {
-				w.Subscriptions[subIdx].entities = append(
-					w.Subscriptions[subIdx].entities[:entIdx],
-					w.Subscriptions[subIdx].entities[entIdx+1:]...,
-				)
-				break
-			}
-		}
-	}
+	w.entityRemovalQueue = append(w.entityRemovalQueue, id)
 
-	delete(w.ComponentFlags, id)
 }
 
 // UpdateComponentFlags updates the component bitset for the entity.
