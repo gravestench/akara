@@ -1,45 +1,85 @@
 package akara
 
-func NewBaseSystem() *BaseSystem {
-	return &BaseSystem{
-		active: true,
-	}
-}
-
-type hasBaseSystem interface {
-	Base() *BaseSystem
-}
-
 // BaseSystem is the base system type
 type BaseSystem struct {
+	baseSystem
+}
+
+type baseSystem struct {
 	*World
 	active bool
+	tickChan chan interface{}
+	preTickFunc func()
+	postTickFunc func()
 }
 
-func (s *BaseSystem) bind(world *World) {
+func (s *BaseSystem) Base() System {
+	return &s.baseSystem
+}
+
+func (s *baseSystem) IsInitialized() bool {
+	return s.World != nil
+}
+
+func (s *baseSystem) Init(world *World) {
 	s.World = world
-}
-
-func (s *BaseSystem) Base() *BaseSystem {
-	return s
+	s.tickChan = make(chan interface{})
 }
 
 // Active whether or not the system is active
-func (s *BaseSystem) Active() bool {
+func (s *baseSystem) Active() bool {
 	return s.active
 }
 
 // SetActive sets the active flag for the system
-func (s *BaseSystem) SetActive(b bool) {
+func (s *baseSystem) SetActive(b bool) {
 	s.active = b
 }
 
 // Destroy removes the system from the world
-func (s *BaseSystem) Destroy() {
+func (s *baseSystem) Destroy() {
 	s.World.RemoveSystem(s)
 }
 
 // InjectComponent is shorthand for registering a component and placing the factory in the given destination
-func (s *BaseSystem) InjectComponent(c Component, dst **ComponentFactory) {
+func (s *baseSystem) InjectComponent(c Component, dst **ComponentFactory) {
 	*dst = s.GetComponentFactory(s.RegisterComponent(c))
+}
+
+// Update is called once per tick
+func (s *baseSystem) Update() {}
+
+// Tick tells the System to tick
+func (s *baseSystem) Tick() {
+	s.tickChan <- nil
+}
+
+// WaitForTick blocks until the System is told to tick
+func (s *baseSystem) WaitForTick() {
+	for {
+		select {
+		case <-s.tickChan:
+			return
+		}
+	}
+}
+
+func (s *baseSystem) SetPreTickFunc(fn func()) {
+	s.preTickFunc = fn
+}
+
+func (s *baseSystem) SetPostTickFunc(fn func()) {
+	s.postTickFunc = fn
+}
+
+func (s *baseSystem) PreTickFunc() {
+	if s.preTickFunc != nil {
+		s.preTickFunc()
+	}
+}
+
+func (s *baseSystem) PostTickFunc() {
+	if s.postTickFunc != nil {
+		s.postTickFunc()
+	}
 }

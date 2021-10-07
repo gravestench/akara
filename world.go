@@ -16,11 +16,13 @@ type componentFactories = map[ComponentID]*ComponentFactory
 func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
+			nextEntityID: new(uint64),
 			ComponentFlags: make(map[EID]*bitset.BitSet),
 			Subscriptions:  make([]*Subscription, 0),
 			entityRemovalQueue: make([]EID, 0),
 		},
 		componentManagement: &componentManagement{
+			nextFactoryID: new(uint64),
 			registry:  make(componentRegistry),
 			factories: make(componentFactories),
 		},
@@ -44,10 +46,11 @@ func NewWorld(cfg *WorldConfig) *World {
 type componentManagement struct {
 	registry  componentRegistry
 	factories componentFactories
+	nextFactoryID *uint64
 }
 
 type entityManagement struct {
-	nextEntityID       EID
+	nextEntityID       *uint64
 	ComponentFlags     map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
 	Subscriptions      []*Subscription
 	entityRemovalQueue []EID
@@ -55,6 +58,7 @@ type entityManagement struct {
 
 type systemManagement struct {
 	Systems            []System
+	systemStartQueue   []func()
 	systemRemovalQueue []System
 }
 
@@ -65,6 +69,7 @@ type World struct {
 	*componentManagement
 	*systemManagement
 	mutex sync.Mutex
+	tickWaitgroup sync.WaitGroup
 }
 
 // RegisterComponent registers a component type, assigning and returning its component ID
@@ -79,9 +84,8 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 		return id
 	}
 
-	nextID := ComponentID(len(w.factories))
-
-	factory := newComponentFactory(nextID)
+	nextId := atomic.AddUint64(w.nextEntityID, 1)
+	factory := newComponentFactory(ComponentID(nextId))
 	factory.world = w
 
 	factory.provider = func() Component {
@@ -112,30 +116,52 @@ func (w *World) NewComponentFilter() *ComponentFilterBuilder {
 	}
 }
 
+// initializeSystem traverses a System's composition tree recursively, ensuring that every base struct's Init is called.
+// for example, MovementSystem is composed of BaseSubscriberSystem, which is composed of BaseSystem. We need to call
+// MovementSystem.BaseSystem.Init(), then MovementSystem.BaseSubscriberSystem.Init(), and finally MovementSystem.Init()
+func (w *World) initializeSystem(s System) {
+	if baseContainer, ok := s.(hasBaseSystem); ok {
+		w.initializeSystem(baseContainer.Base())
+	}
+
+	// once we've traversed this system's whole composition tree, go ahead and call the top-level Init
+	s.Init(w)
+}
+
 // AddSystem adds a system to the world
 func (w *World) AddSystem(s System) *World {
-	w.mutex.Lock()
+	// make sure that we properly initialize all the Systems that this System is built on top of
+	w.initializeSystem(s)
 
-	w.Systems = append(w.Systems, s)
-
-	s.SetActive(true)
-
-	w.mutex.Unlock()
-
-	if baseContainer, ok := s.(hasBaseSystem); ok {
-		baseContainer.Base().World = w
-	}
-
-	if initializer, ok := s.(SystemInitializer); ok {
-		initializer.Init(w)
-	}
-
+	// keep track of all our systems' subscriptions
 	if subscriber, ok := s.(SubscriberSystem); ok {
 		subs := subscriber.GetSubscriptions()
 		for idx := range subs {
 			subs[idx] = w.AddSubscription(subs[idx].Filter)
 		}
 	}
+
+	w.mutex.Lock()
+	w.Systems = append(w.Systems, s)
+	w.mutex.Unlock()
+
+	// add System start func to queue.
+	// allows the system to update once per tick in its own thread once started
+	w.systemStartQueue = append(w.systemStartQueue, func() {
+		s.SetActive(true)
+
+		for s.Active() {
+			// blocks until the World ticks
+			s.WaitForTick()
+
+			s.PreTickFunc()
+			s.Update()
+			s.PostTickFunc()
+
+			// inform the World that this System finished its update for the current tick
+			w.tickWaitgroup.Done()
+		}
+	})
 
 	return w
 }
@@ -150,7 +176,18 @@ func (w *World) RemoveSystem(s System) *World {
 	return w
 }
 
-func (w *World) processRemoveQueue() {
+func (w *World) processSystemStartQueue() {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	for _, systemStartFunc := range w.systemStartQueue {
+		go systemStartFunc()
+	}
+
+	w.systemStartQueue = nil
+}
+
+func (w *World) processRemoveQueues() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -190,34 +227,23 @@ func (w *World) UpdateEntity(id EID) {
 func (w *World) Update(dt time.Duration) error {
 	w.TimeDelta = dt
 
-	for sysIdx := range w.Systems {
-		if !w.Systems[sysIdx].Active() {
-			continue
-		}
+	w.processSystemStartQueue()
 
-		if sys, ok := w.Systems[sysIdx].(SystemInitializer); ok {
-			if !sys.IsInitialized() {
-				if base, ok := sys.(baseSystem); ok {
-					base.bind(w)
-				}
+	w.processRemoveQueues()
 
-				sys.Init(w)
-				continue
-			}
-		}
-
-		if sys, ok := w.Systems[sysIdx].(SystemUpdater); ok {
-			sys.Update()
-			continue
-		}
-
-		if sys, ok := w.Systems[sysIdx].(SystemUpdaterTimed); ok {
-			sys.Update(dt)
-			continue
-		}
+	numSystems := len(w.Systems)
+	if numSystems == 0 {
+		return nil
 	}
 
-	w.processRemoveQueue()
+	// allow all the Systems to tick once, wait for all of them to finish
+	w.tickWaitgroup.Add(numSystems)
+
+	for _, system := range w.Systems {
+		system.Tick()
+	}
+
+	w.tickWaitgroup.Wait()
 
 	return nil
 }
@@ -271,10 +297,10 @@ func (w *World) AddSubscription(input interface{}) *Subscription {
 
 // NewEntity creates a new entity and Component BitSet
 func (w *World) NewEntity() EID {
-	atomic.AddUint64(&w.nextEntityID, 1)
-	w.ComponentFlags[w.nextEntityID] = &bitset.BitSet{}
+	nextId := atomic.AddUint64(w.nextEntityID, 1)
+	w.ComponentFlags[nextId] = &bitset.BitSet{}
 
-	return w.nextEntityID
+	return nextId
 }
 
 // RemoveEntity removes an entity

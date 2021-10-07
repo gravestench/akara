@@ -107,14 +107,8 @@ type MovementSystem struct {
 	disableLog      bool
 }
 
-func (m *MovementSystem) IsInitialized() bool {
-	return true
-}
-
 // Init initializes the system with the given world
-func (m *MovementSystem) Init(world *World) {
-	m.World = world
-
+func (m *MovementSystem) Init(_ *World) {
 	filter := m.NewComponentFilter()
 	filter.Require(
 		&Position{},

@@ -2,19 +2,6 @@ package akara
 
 type subscriptions = map[*ComponentFilter]*Subscription
 
-// NewBaseSubscriberSystem creates a new subscriber system instance from the given component filters
-func NewBaseSubscriberSystem(filters ...*ComponentFilter) *BaseSubscriberSystem {
-	ss := &BaseSubscriberSystem{
-		BaseSystem: *NewBaseSystem(),
-	}
-
-	for idx := range filters {
-		ss.AddSubscription(NewSubscription(filters[idx]))
-	}
-
-	return ss
-}
-
 type SubscriberSystem interface {
 	System
 	hasBaseSystem
@@ -31,8 +18,8 @@ type BaseSubscriberSystem struct {
 	Subscriptions subscriptions
 }
 
-func (b *BaseSubscriberSystem) Base() BaseSystem {
-	return b.BaseSystem
+func (b *BaseSubscriberSystem) Base() System {
+	return &b.BaseSystem
 }
 
 func (b *BaseSubscriberSystem) AddSubscription(s interface{}) *Subscription {
