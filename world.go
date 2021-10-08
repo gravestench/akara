@@ -195,6 +195,7 @@ func (w *World) processRemoveQueues() {
 		for idx := range w.Systems {
 			if w.Systems[idx] == w.systemRemovalQueue[remIdx] {
 				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
+				w.systemRemovalQueue[remIdx].SetActive(false)
 				break
 			}
 		}
