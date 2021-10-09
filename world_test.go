@@ -111,4 +111,3 @@ func (m *testComponentFactory) Get(id EID) (*testComponent, bool) {
 
 	return component.(*testComponent), found
 }
-

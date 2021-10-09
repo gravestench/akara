@@ -16,14 +16,14 @@ type componentFactories = map[ComponentID]*ComponentFactory
 func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
-			nextEntityID: new(uint64),
-			Subscriptions:  make([]*Subscription, 0),
+			nextEntityID:       new(uint64),
+			Subscriptions:      make([]*Subscription, 0),
 			entityRemovalQueue: make([]EID, 0),
 		},
 		componentManagement: &componentManagement{
 			nextFactoryID: new(uint64),
-			registry:  make(componentRegistry),
-			factories: make(componentFactories),
+			registry:      make(componentRegistry),
+			factories:     make(componentFactories),
 		},
 		systemManagement: &systemManagement{
 			Systems:            make([]System, 0),
@@ -43,8 +43,8 @@ func NewWorld(cfg *WorldConfig) *World {
 }
 
 type componentManagement struct {
-	registry  componentRegistry
-	factories componentFactories
+	registry      componentRegistry
+	factories     componentFactories
 	nextFactoryID *uint64
 }
 
@@ -67,7 +67,7 @@ type World struct {
 	*entityManagement
 	*componentManagement
 	*systemManagement
-	mutex sync.Mutex
+	mutex         sync.Mutex
 	tickWaitgroup sync.WaitGroup
 }
 

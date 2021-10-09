@@ -47,7 +47,7 @@ func (b *BaseSubscriberSystem) AddSubscription(s interface{}) *Subscription {
 }
 
 func (b *BaseSubscriberSystem) RemoveSubscription(sub *Subscription) {
-	delete(b.Subscriptions,  sub.Filter)
+	delete(b.Subscriptions, sub.Filter)
 }
 
 func (b *BaseSubscriberSystem) GetSubscriptions() []*Subscription {
@@ -59,4 +59,3 @@ func (b *BaseSubscriberSystem) GetSubscriptions() []*Subscription {
 
 	return result
 }
-

@@ -7,9 +7,9 @@ type BaseSystem struct {
 
 type baseSystem struct {
 	*World
-	active bool
-	tickChan chan interface{}
-	preTickFunc func()
+	active       bool
+	tickChan     chan interface{}
+	preTickFunc  func()
 	postTickFunc func()
 }
 

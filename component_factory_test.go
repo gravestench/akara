@@ -79,7 +79,7 @@ func benchComMapGet(i int, b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		cf.Get(EID(n%i))
+		cf.Get(EID(n % i))
 	}
 }
 
@@ -133,7 +133,7 @@ func BenchmarkComponentFactory_RemoveAll(b *testing.B) {
 	}
 }
 
-type testComponent struct {}
+type testComponent struct{}
 
 func (c *testComponent) New() Component {
 	return &testComponent{}
