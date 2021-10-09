@@ -17,7 +17,6 @@ func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
 			nextEntityID: new(uint64),
-			ComponentFlags: make(map[EID]*bitset.BitSet),
 			Subscriptions:  make([]*Subscription, 0),
 			entityRemovalQueue: make([]EID, 0),
 		},
@@ -51,7 +50,7 @@ type componentManagement struct {
 
 type entityManagement struct {
 	nextEntityID       *uint64
-	ComponentFlags     map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
+	ComponentFlags     sync.Map // map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
 	Subscriptions      []*Subscription
 	entityRemovalQueue []EID
 }
@@ -214,7 +213,7 @@ func (w *World) processRemoveQueues() {
 			}
 		}
 
-		delete(w.ComponentFlags, id)
+		w.ComponentFlags.Delete(id)
 	}
 }
 
@@ -299,7 +298,7 @@ func (w *World) AddSubscription(input interface{}) *Subscription {
 // NewEntity creates a new entity and Component BitSet
 func (w *World) NewEntity() EID {
 	nextId := atomic.AddUint64(w.nextEntityID, 1)
-	w.ComponentFlags[nextId] = &bitset.BitSet{}
+	w.ComponentFlags.Store(nextId, &bitset.BitSet{})
 
 	return nextId
 }
@@ -323,7 +322,12 @@ func (w *World) updateComponentFlags(id EID) {
 
 		// ... for the bit index that corresponds to the map id,
 		// use the true/false value we just obtained as the value for that bit in the bitset.
-		w.ComponentFlags[id].Set(int(w.factories[idx].ID()), found)
+		cf, cfFound := w.ComponentFlags.Load(id)
+		if !cfFound {
+			continue
+		}
+
+		cf.(*bitset.BitSet).Set(int(w.factories[idx].ID()), found)
 	}
 }
 
@@ -335,10 +339,18 @@ func (w *World) updateSubscriptions(id EID) {
 
 	w.updateComponentFlags(id)
 
+	cfInterface, found := w.ComponentFlags.Load(id)
+	if !found {
+		// uhhhhh
+		return
+	}
+
+	cf := cfInterface.(*bitset.BitSet)
+
 	for idx := range w.Subscriptions {
 		w.Subscriptions[idx].mutex.Lock()
 
-		if w.Subscriptions[idx].Filter.Allow(w.ComponentFlags[id]) {
+		if w.Subscriptions[idx].Filter.Allow(cf) {
 			w.Subscriptions[idx].AddEntity(id)
 		} else {
 			w.Subscriptions[idx].RemoveEntity(id)

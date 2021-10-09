@@ -33,29 +33,41 @@ func TestWorld_RemoveEntity(t *testing.T) {
 		w := NewWorld(NewWorldConfig())
 
 		Convey("An entity can always be removed, even if it does not exist", func() {
-			So(len(w.ComponentFlags), ShouldEqual, 0)
+			_, found := w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeFalse)
+
 			w.RemoveEntity(0)
-			So(len(w.ComponentFlags), ShouldEqual, 0)
+
+			_, found = w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeFalse)
 		})
 
 		Convey("An entity can be removed", func() {
 			e := w.NewEntity()
 
+			_, found := w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeTrue)
+
 			w.RemoveEntity(e)
 			w.Update(0)
 
-			So(len(w.ComponentFlags), ShouldEqual, 0)
+			_, found = w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeFalse)
 		})
 
 		Convey("An entity can be removed more than once", func() {
 			e := w.NewEntity()
 
+			_, found := w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeTrue)
+
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
 			w.Update(0)
 
-			So(len(w.ComponentFlags), ShouldEqual, 0)
+			_, found = w.ComponentFlags.Load(EntityID(1))
+			So(found, ShouldBeFalse)
 		})
 
 		Convey("An entity which is removed is also removed from all subscriptions", func() {
@@ -69,10 +81,16 @@ func TestWorld_RemoveEntity(t *testing.T) {
 
 			So(len(sub.GetEntities()), ShouldEqual, 1)
 
+			_, found := w.ComponentFlags.Load(e)
+			So(found, ShouldBeTrue)
+
 			w.RemoveEntity(e)
 			w.Update(0)
 
 			So(len(sub.GetEntities()), ShouldEqual, 0)
+
+			_, found = w.ComponentFlags.Load(e)
+			So(found, ShouldBeFalse)
 		})
 	})
 }
