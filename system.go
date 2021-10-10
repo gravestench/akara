@@ -8,8 +8,11 @@ type System interface {
 	SetActive(bool)
 	Destroy()
 	Update()
+
 	Tick()
 	WaitForTick()
+	TickRate() float64
+	SetTickRate(float64)
 	PreTickFunc()
 	PostTickFunc()
 	SetPreTickFunc(func())

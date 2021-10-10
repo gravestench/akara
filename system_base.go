@@ -1,5 +1,7 @@
 package akara
 
+import "time"
+
 // BaseSystem is the base system type
 type BaseSystem struct {
 	baseSystem
@@ -8,10 +10,14 @@ type BaseSystem struct {
 type baseSystem struct {
 	*World
 	active       bool
+	tickRate     float64
+	lastTick     time.Time
 	tickChan     chan interface{}
 	preTickFunc  func()
 	postTickFunc func()
 }
+
+var DefaultTickRate float64 = 100
 
 func (s *BaseSystem) Base() System {
 	return &s.baseSystem
@@ -23,6 +29,9 @@ func (s *baseSystem) IsInitialized() bool {
 
 func (s *baseSystem) Init(world *World) {
 	s.World = world
+	if s.tickRate == 0 {
+		s.tickRate = DefaultTickRate
+	}
 	s.tickChan = make(chan interface{})
 }
 
@@ -62,6 +71,14 @@ func (s *baseSystem) WaitForTick() {
 			return
 		}
 	}
+}
+
+func (s *baseSystem) TickRate() float64 {
+	return s.tickRate
+}
+
+func (s *baseSystem) SetTickRate(rate float64) {
+	s.tickRate = rate
 }
 
 func (s *baseSystem) SetPreTickFunc(fn func()) {

@@ -34,11 +34,10 @@ func Test_ExampleMovementSystem(t *testing.T) {
 	}
 
 	numUpdates := 4
-	const updateInterval = time.Second
 
 	for numUpdates > 0 {
 		fmt.Print("\nUpdate...\n")
-		err := world.Update(updateInterval)
+		err := world.Update(0)
 		if err != nil {
 			t.Errorf("failed to update world: %s", err)
 			t.Fail()

@@ -63,12 +63,18 @@ type systemManagement struct {
 
 // World contains all of the Entities, Components, and Systems
 type World struct {
+	// TimeDelta is the time since the last tick occurred
 	TimeDelta time.Duration
 	*entityManagement
 	*componentManagement
 	*systemManagement
-	mutex         sync.Mutex
-	tickWaitgroup sync.WaitGroup
+	// mutex locks access to various World resources to maintain thread safety.
+	// This should be locked when accessing any shared World resources, like slices and maps
+	mutex sync.Mutex
+	// tickWaitgroup tracks how many systems are still processing the current tick,
+	// allowing World to wait for them to finish before moving on to the next tick
+	tickWaitgroup  sync.WaitGroup
+	targetTickRate float32
 }
 
 // RegisterComponent registers a component type, assigning and returning its component ID
@@ -149,13 +155,24 @@ func (w *World) AddSystem(s System) *World {
 	w.systemStartQueue = append(w.systemStartQueue, func() {
 		s.SetActive(true)
 
+		var sinceLastTick time.Duration
 		for s.Active() {
 			// blocks until the World ticks
 			s.WaitForTick()
 
-			s.PreTickFunc()
-			s.Update()
-			s.PostTickFunc()
+			// check if this system cares about this particular tick.
+			// the World ticks at a high frequency, and systems can choose to ignore ticks in order to update at
+			// a reduced rate
+			if s.TickRate() > 0 {
+				sinceLastTick += w.TimeDelta
+				if sinceLastTick >= time.Duration(float64(time.Second)*(1/s.TickRate())) {
+					sinceLastTick = 0
+
+					s.PreTickFunc()
+					s.Update()
+					s.PostTickFunc()
+				}
+			}
 
 			// inform the World that this System finished its update for the current tick
 			w.tickWaitgroup.Done()
