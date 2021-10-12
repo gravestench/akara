@@ -138,17 +138,8 @@ func (w *World) AddSystem(s System, activate bool) *World {
 	// make sure that we properly initialize the System
 	w.initializeSystem(s)
 
-	// keep track of all our systems' subscriptions
-	if subscriber, ok := s.(SubscriberSystem); ok {
-		subs := subscriber.GetSubscriptions()
-		for idx := range subs {
-			subs[idx] = w.AddSubscription(subs[idx].Filter)
-		}
-	}
-
 	w.mutex.Lock()
 	w.Systems = append(w.Systems, s)
-	w.mutex.Unlock()
 
 	// add System to activation queue.
 	// Activating the system makes it tick automatically in its own thread
@@ -157,6 +148,7 @@ func (w *World) AddSystem(s System, activate bool) *World {
 			s.Activate()
 		})
 	}
+	w.mutex.Unlock()
 
 	return w
 }
