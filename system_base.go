@@ -4,99 +4,125 @@ import "time"
 
 // BaseSystem is the base system type
 type BaseSystem struct {
-	baseSystem
-}
-
-type baseSystem struct {
 	*World
-	active       bool
-	tickRate     float64
-	lastTick     time.Time
-	tickChan     chan interface{}
-	preTickFunc  func()
-	postTickFunc func()
+	active           bool
+	tickFrequency    float64
+	tickPeriod		 time.Duration
+	lastTick         time.Time
+	preTickCallback  func()
+	tickCallback	 func()
+	postTickCallback func()
 }
 
 var DefaultTickRate float64 = 100
 
-func (s *BaseSystem) Base() System {
-	return &s.baseSystem
+func (s *BaseSystem) base() baseSystem {
+	return s
 }
 
-func (s *baseSystem) IsInitialized() bool {
+func (s *BaseSystem) Name() string {
+	return "BaseSystem"
+}
+
+func (s *BaseSystem) IsInitialized() bool {
 	return s.World != nil
 }
 
-func (s *baseSystem) Init(world *World) {
+func (s *BaseSystem) Init(world *World, tickFunc func()) {
 	s.World = world
-	if s.tickRate == 0 {
-		s.tickRate = DefaultTickRate
+	s.tickCallback = tickFunc
+
+	if s.tickFrequency == 0 {
+		s.SetTickFrequency(DefaultTickRate)
 	}
-	s.tickChan = make(chan interface{})
 }
 
-// Active whether or not the system is active
-func (s *baseSystem) Active() bool {
+// Active returns true if the system is active, otherwise false
+func (s *BaseSystem) Active() bool {
 	return s.active
 }
 
-// SetActive sets the active flag for the system
-func (s *baseSystem) SetActive(b bool) {
-	s.active = b
+// Deactivate marks the system inactive and stops it from ticking automatically in the background.
+// The system can be re-activated by calling the Activate method.
+func (s *BaseSystem) Deactivate() {
+	s.active = false
 }
 
-// Destroy removes the system from the world
-func (s *baseSystem) Destroy() {
-	s.World.RemoveSystem(s)
+// Activate calls Tick repeatedly at the target TickRate. This method blocks the thread.
+func (s *BaseSystem) Activate() {
+	s.active = true
+
+	go func() {
+		ticker := time.NewTicker(s.TickPeriod())
+
+		for range ticker.C {
+			if !s.Active() {
+				break
+			}
+
+			s.Tick()
+		}
+
+		ticker.Stop()
+	}()
 }
 
 // InjectComponent is shorthand for registering a component and placing the factory in the given destination
-func (s *baseSystem) InjectComponent(c Component, dst **ComponentFactory) {
+func (s *BaseSystem) InjectComponent(c Component, dst **ComponentFactory) {
 	*dst = s.GetComponentFactory(s.RegisterComponent(c))
 }
 
-// Update is called once per tick
-func (s *baseSystem) Update() {}
+// Tick performs a single tick. This is called automatically when the System is Active, but can be called manually
+// to single-step the System, regardless of the System's TickRate.
+func (s *BaseSystem) Tick() {
+	s.preTickFunc()
+	s.tickFunc()
+	s.postTickFunc()
 
-// Tick tells the System to tick
-func (s *baseSystem) Tick() {
-	s.tickChan <- nil
+	s.lastTick = time.Now()
 }
 
-// WaitForTick blocks until the System is told to tick
-func (s *baseSystem) WaitForTick() {
-	for {
-		select {
-		case <-s.tickChan:
-			return
-		}
+// TickPeriod returns the length of one tick as a time.Duration
+func (s *BaseSystem) TickPeriod() time.Duration {
+	return s.tickPeriod
+}
+
+// TickFrequency returns the maximum number of ticks per second this system will perform.
+func (s *BaseSystem) TickFrequency() float64 {
+	return s.tickFrequency
+}
+
+func (s *BaseSystem) SetTickFrequency(rate float64) {
+	s.tickFrequency = rate
+	s.tickPeriod = calculateTickPeriod(rate)
+}
+
+func (s *BaseSystem) SetPreTickCallback(fn func()) {
+	s.preTickCallback = fn
+}
+
+func (s *BaseSystem) SetPostTickCallback(fn func()) {
+	s.postTickCallback = fn
+}
+
+func (s *BaseSystem) preTickFunc() {
+	if s.preTickCallback != nil {
+		s.preTickCallback()
 	}
 }
 
-func (s *baseSystem) TickRate() float64 {
-	return s.tickRate
-}
-
-func (s *baseSystem) SetTickRate(rate float64) {
-	s.tickRate = rate
-}
-
-func (s *baseSystem) SetPreTickFunc(fn func()) {
-	s.preTickFunc = fn
-}
-
-func (s *baseSystem) SetPostTickFunc(fn func()) {
-	s.postTickFunc = fn
-}
-
-func (s *baseSystem) PreTickFunc() {
-	if s.preTickFunc != nil {
-		s.preTickFunc()
+func (s *BaseSystem) tickFunc() {
+	if s.tickCallback != nil {
+		s.tickCallback()
 	}
 }
 
-func (s *baseSystem) PostTickFunc() {
-	if s.postTickFunc != nil {
-		s.postTickFunc()
+func (s *BaseSystem) postTickFunc() {
+	if s.postTickCallback != nil {
+		s.postTickCallback()
 	}
+}
+
+func calculateTickPeriod(freq float64) time.Duration {
+	return time.Duration(float64(time.Second) * (1 / freq))
 }

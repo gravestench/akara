@@ -18,8 +18,8 @@ type BaseSubscriberSystem struct {
 	Subscriptions subscriptions
 }
 
-func (b *BaseSubscriberSystem) Base() System {
-	return &b.BaseSystem
+func (b *BaseSubscriberSystem) Name() string {
+	return "BaseSubscriberSystem"
 }
 
 func (b *BaseSubscriberSystem) AddSubscription(s interface{}) *Subscription {

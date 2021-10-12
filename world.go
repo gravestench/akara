@@ -32,7 +32,7 @@ func NewWorld(cfg *WorldConfig) *World {
 	}
 
 	for _, system := range cfg.systems {
-		world.AddSystem(system)
+		world.AddSystem(system, true)
 	}
 
 	for _, c := range cfg.components {
@@ -56,9 +56,9 @@ type entityManagement struct {
 }
 
 type systemManagement struct {
-	Systems            []System
-	systemStartQueue   []func()
-	systemRemovalQueue []System
+	Systems               []System
+	systemActivationQueue []func()
+	systemRemovalQueue    []System
 }
 
 // World contains all of the Entities, Components, and Systems
@@ -121,21 +121,21 @@ func (w *World) NewComponentFilter() *ComponentFilterBuilder {
 	}
 }
 
-// initializeSystem traverses a System's composition tree recursively, ensuring that every base struct's Init is called.
-// for example, MovementSystem is composed of BaseSubscriberSystem, which is composed of BaseSystem. We need to call
-// MovementSystem.BaseSystem.Init(), then MovementSystem.BaseSubscriberSystem.Init(), and finally MovementSystem.Init()
+// initializeSystem calls the System's Init method, and also calls the system's BaseSystem.Init() method, if
+// the system is derived from the BaseSystem.
 func (w *World) initializeSystem(s System) {
 	if baseContainer, ok := s.(hasBaseSystem); ok {
-		w.initializeSystem(baseContainer.Base())
+		baseContainer.base().Init(w, s.Update)
 	}
 
-	// once we've traversed this system's whole composition tree, go ahead and call the top-level Init
-	s.Init(w)
+	if initializer, ok := s.(Initializer); ok {
+		initializer.Init(w)
+	}
 }
 
-// AddSystem adds a system to the world
-func (w *World) AddSystem(s System) *World {
-	// make sure that we properly initialize all the Systems that this System is built on top of
+// AddSystem adds a system to the world. The System will become Active on the next World Update
+func (w *World) AddSystem(s System, activate bool) *World {
+	// make sure that we properly initialize the System
 	w.initializeSystem(s)
 
 	// keep track of all our systems' subscriptions
@@ -150,34 +150,13 @@ func (w *World) AddSystem(s System) *World {
 	w.Systems = append(w.Systems, s)
 	w.mutex.Unlock()
 
-	// add System start func to queue.
-	// allows the system to update once per tick in its own thread once started
-	w.systemStartQueue = append(w.systemStartQueue, func() {
-		s.SetActive(true)
-
-		var sinceLastTick time.Duration
-		for s.Active() {
-			// blocks until the World ticks
-			s.WaitForTick()
-
-			// check if this system cares about this particular tick.
-			// the World ticks at a high frequency, and systems can choose to ignore ticks in order to update at
-			// a reduced rate
-			if s.TickRate() > 0 {
-				sinceLastTick += w.TimeDelta
-				if sinceLastTick >= time.Duration(float64(time.Second)*(1/s.TickRate())) {
-					sinceLastTick = 0
-
-					s.PreTickFunc()
-					s.Update()
-					s.PostTickFunc()
-				}
-			}
-
-			// inform the World that this System finished its update for the current tick
-			w.tickWaitgroup.Done()
-		}
-	})
+	// add System to activation queue.
+	// Activating the system makes it tick automatically in its own thread
+	if activate {
+		w.systemActivationQueue = append(w.systemActivationQueue, func() {
+			s.Activate()
+		})
+	}
 
 	return w
 }
@@ -196,11 +175,11 @@ func (w *World) processSystemStartQueue() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
-	for _, systemStartFunc := range w.systemStartQueue {
-		go systemStartFunc()
+	for _, systemStartFunc := range w.systemActivationQueue {
+		systemStartFunc()
 	}
 
-	w.systemStartQueue = nil
+	w.systemActivationQueue = nil
 }
 
 func (w *World) processRemoveQueues() {
@@ -211,7 +190,7 @@ func (w *World) processRemoveQueues() {
 		for idx := range w.Systems {
 			if w.Systems[idx] == w.systemRemovalQueue[remIdx] {
 				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
-				w.systemRemovalQueue[remIdx].SetActive(false)
+				w.systemRemovalQueue[remIdx].Deactivate()
 				break
 			}
 		}
@@ -247,20 +226,6 @@ func (w *World) Update(dt time.Duration) error {
 	w.processSystemStartQueue()
 
 	w.processRemoveQueues()
-
-	numSystems := len(w.Systems)
-	if numSystems == 0 {
-		return nil
-	}
-
-	// allow all the Systems to tick once, wait for all of them to finish
-	w.tickWaitgroup.Add(numSystems)
-
-	for _, system := range w.Systems {
-		system.Tick()
-	}
-
-	w.tickWaitgroup.Wait()
 
 	return nil
 }
