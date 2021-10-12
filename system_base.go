@@ -5,6 +5,7 @@ import "time"
 // BaseSystem is the base system type
 type BaseSystem struct {
 	*World
+	TimeDelta        time.Duration
 	active           bool
 	tickFrequency    float64
 	tickPeriod		 time.Duration
@@ -79,6 +80,7 @@ func (s *BaseSystem) Tick() {
 	s.tickFunc()
 	s.postTickFunc()
 
+	s.TimeDelta = time.Since(s.lastTick)
 	s.lastTick = time.Now()
 }
 
