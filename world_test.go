@@ -49,7 +49,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			So(found, ShouldBeTrue)
 
 			w.RemoveEntity(e)
-			w.Update(0)
+			w.Update()
 
 			_, found = w.ComponentFlags.Load(EntityID(1))
 			So(found, ShouldBeFalse)
@@ -64,7 +64,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
 			w.RemoveEntity(e)
-			w.Update(0)
+			w.Update()
 
 			_, found = w.ComponentFlags.Load(EntityID(1))
 			So(found, ShouldBeFalse)
@@ -85,7 +85,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			So(found, ShouldBeTrue)
 
 			w.RemoveEntity(e)
-			w.Update(0)
+			w.Update()
 
 			So(len(sub.GetEntities()), ShouldEqual, 0)
 

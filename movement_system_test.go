@@ -37,7 +37,7 @@ func Test_ExampleMovementSystem(t *testing.T) {
 		v.X, v.Y = between(-10, 10), between(-10, 10)
 	}
 
-	world.Update(0)
+	world.Update()
 
 	numUpdates := 4
 	loopsWaited := 0
@@ -87,10 +87,8 @@ func Bench_ExampleMovementSystemN(numEntities int, b *testing.B) {
 	}
 
 	numUpdates := b.N
-	const updateInterval = time.Second
-
 	for numUpdates > 0 {
-		err := world.Update(updateInterval)
+		err := world.Update()
 		if err != nil {
 			b.Errorf("failed to update world: %s", err)
 			b.Fail()
@@ -149,7 +147,7 @@ func (m *MovementSystem) move(id EID) {
 		return
 	}
 
-	s := float64(m.World.TimeDelta) / float64(time.Second)
+	s := float64(m.TimeDelta) / float64(time.Second)
 	newX := p.X + (v.X * s)
 	newY := p.Y + (v.Y * s)
 

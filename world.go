@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 type componentRegistry = map[string]ComponentID
@@ -63,18 +62,12 @@ type systemManagement struct {
 
 // World contains all of the Entities, Components, and Systems
 type World struct {
-	// TimeDelta is the time since the last tick occurred
-	TimeDelta time.Duration
 	*entityManagement
 	*componentManagement
 	*systemManagement
 	// mutex locks access to various World resources to maintain thread safety.
 	// This should be locked when accessing any shared World resources, like slices and maps
 	mutex sync.Mutex
-	// tickWaitgroup tracks how many systems are still processing the current tick,
-	// allowing World to wait for them to finish before moving on to the next tick
-	tickWaitgroup  sync.WaitGroup
-	targetTickRate float32
 }
 
 // RegisterComponent registers a component type, assigning and returning its component ID
@@ -212,9 +205,7 @@ func (w *World) UpdateEntity(id EID) {
 }
 
 // Update iterates through all Systems and calls the update method if the system is active
-func (w *World) Update(dt time.Duration) error {
-	w.TimeDelta = dt
-
+func (w *World) Update() error {
 	w.processSystemStartQueue()
 
 	w.processRemoveQueues()

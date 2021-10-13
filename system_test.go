@@ -48,7 +48,7 @@ func TestSystem(t *testing.T) {
 
 			So(len(w.Systems), ShouldEqual, 1)
 
-			w.Update(0)
+			w.Update()
 
 			So(sys.Active(), ShouldBeFalse)
 
@@ -84,7 +84,7 @@ func TestSystem(t *testing.T) {
 
 			// the system becomes active on the next world update
 			So(sys.Active(), ShouldBeFalse)
-			w.Update(0)
+			w.Update()
 			So(sys.Active(), ShouldBeTrue)
 
 			Convey("An activated System ticks on its own", func() {
