@@ -4,6 +4,8 @@ import "time"
 
 // System describes the bare minimum of what is considered a system
 type System interface {
+	Name() string
+
 	Active() bool
 	Activate()
 	Deactivate()
@@ -15,6 +17,8 @@ type System interface {
 	SetTickFrequency(float64)
 	SetPreTickCallback(func())
 	SetPostTickCallback(func())
+	TickCount() uint
+	Uptime() time.Duration
 }
 
 type Initializer interface {

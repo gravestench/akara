@@ -13,6 +13,10 @@ type BaseSystem struct {
 	preTickCallback  func()
 	tickCallback	 func()
 	postTickCallback func()
+
+	// debug data collection
+	tickCount uint
+	uptime time.Duration
 }
 
 var DefaultTickRate float64 = 100
@@ -53,18 +57,32 @@ func (s *BaseSystem) Deactivate() {
 func (s *BaseSystem) Activate() {
 	s.active = true
 
-	go func() {
-		ticker := time.NewTicker(s.TickPeriod())
+	// prevent the system from thinking that the last tick was 1970-01-01...
+	s.lastTick = time.Now()
 
-		for range ticker.C {
-			if !s.Active() {
-				break
+	go func() {
+		// if the TickFrequency is set, try to tick that frequently. Otherwise, we tick as fast as we can
+		if s.TickFrequency() != 0 {
+			ticker := time.NewTicker(s.TickPeriod())
+
+			for range ticker.C {
+				if !s.Active() {
+					break
+				}
+
+				s.Tick()
 			}
 
-			s.Tick()
-		}
+			ticker.Stop()
+		} else {
+			for {
+				if !s.Active() {
+					break
+				}
 
-		ticker.Stop()
+				s.Tick()
+			}
+		}
 	}()
 }
 
@@ -82,6 +100,8 @@ func (s *BaseSystem) Tick() {
 
 	s.TimeDelta = time.Since(s.lastTick)
 	s.lastTick = time.Now()
+	s.tickCount += 1
+	s.uptime += s.TimeDelta
 }
 
 // TickPeriod returns the length of one tick as a time.Duration
@@ -96,7 +116,11 @@ func (s *BaseSystem) TickFrequency() float64 {
 
 func (s *BaseSystem) SetTickFrequency(rate float64) {
 	s.tickFrequency = rate
-	s.tickPeriod = calculateTickPeriod(rate)
+	if rate != 0 {
+		s.tickPeriod = calculateTickPeriod(rate)
+	} else {
+		s.tickPeriod = 0
+	}
 }
 
 func (s *BaseSystem) SetPreTickCallback(fn func()) {
@@ -123,6 +147,14 @@ func (s *BaseSystem) postTickFunc() {
 	if s.postTickCallback != nil {
 		s.postTickCallback()
 	}
+}
+
+func (s *BaseSystem) TickCount() uint {
+	return s.tickCount
+}
+
+func (s *BaseSystem) Uptime() time.Duration {
+	return s.uptime
 }
 
 func calculateTickPeriod(freq float64) time.Duration {
