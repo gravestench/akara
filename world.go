@@ -16,13 +16,14 @@ type componentFactories = map[ComponentID]*ComponentFactory
 func NewWorld(cfg *WorldConfig) *World {
 	world := &World{
 		entityManagement: &entityManagement{
-			ComponentFlags: make(map[EID]*bitset.BitSet),
-			Subscriptions:  make([]*Subscription, 0),
+			nextEntityID:       new(uint64),
+			Subscriptions:      make([]*Subscription, 0),
 			entityRemovalQueue: make([]EID, 0),
 		},
 		componentManagement: &componentManagement{
-			registry:  make(componentRegistry),
-			factories: make(componentFactories),
+			nextFactoryID: new(uint64),
+			registry:      make(componentRegistry),
+			factories:     make(componentFactories),
 		},
 		systemManagement: &systemManagement{
 			Systems:            make([]System, 0),
@@ -31,7 +32,7 @@ func NewWorld(cfg *WorldConfig) *World {
 	}
 
 	for _, system := range cfg.systems {
-		world.AddSystem(system)
+		world.AddSystem(system, true)
 	}
 
 	for _, c := range cfg.components {
@@ -42,29 +43,38 @@ func NewWorld(cfg *WorldConfig) *World {
 }
 
 type componentManagement struct {
-	registry  componentRegistry
-	factories componentFactories
+	registry      componentRegistry
+	factories     componentFactories
+	nextFactoryID *uint64
 }
 
 type entityManagement struct {
-	nextEntityID       EID
-	ComponentFlags     map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
+	nextEntityID       *uint64
+	ComponentFlags     sync.Map // map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
 	Subscriptions      []*Subscription
 	entityRemovalQueue []EID
 }
 
 type systemManagement struct {
-	Systems            []System
-	systemRemovalQueue []System
+	Systems               []System
+	systemActivationQueue []func()
+	systemRemovalQueue    []System
 }
 
 // World contains all of the Entities, Components, and Systems
 type World struct {
+	// TimeDelta is the time since the last tick occurred
 	TimeDelta time.Duration
 	*entityManagement
 	*componentManagement
 	*systemManagement
+	// mutex locks access to various World resources to maintain thread safety.
+	// This should be locked when accessing any shared World resources, like slices and maps
 	mutex sync.Mutex
+	// tickWaitgroup tracks how many systems are still processing the current tick,
+	// allowing World to wait for them to finish before moving on to the next tick
+	tickWaitgroup  sync.WaitGroup
+	targetTickRate float32
 }
 
 // RegisterComponent registers a component type, assigning and returning its component ID
@@ -79,9 +89,8 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 		return id
 	}
 
-	nextID := ComponentID(len(w.factories))
-
-	factory := newComponentFactory(nextID)
+	nextId := atomic.AddUint64(w.nextEntityID, 1)
+	factory := newComponentFactory(ComponentID(nextId))
 	factory.world = w
 
 	factory.provider = func() Component {
@@ -112,30 +121,34 @@ func (w *World) NewComponentFilter() *ComponentFilterBuilder {
 	}
 }
 
-// AddSystem adds a system to the world
-func (w *World) AddSystem(s System) *World {
-	w.mutex.Lock()
-
-	w.Systems = append(w.Systems, s)
-
-	s.SetActive(true)
-
-	w.mutex.Unlock()
-
+// initializeSystem calls the System's Init method, and also calls the system's BaseSystem.Init() method, if
+// the system is derived from the BaseSystem.
+func (w *World) initializeSystem(s System) {
 	if baseContainer, ok := s.(hasBaseSystem); ok {
-		baseContainer.Base().World = w
+		baseContainer.base().Init(w, s.Update)
 	}
 
-	if initializer, ok := s.(SystemInitializer); ok {
+	if initializer, ok := s.(Initializer); ok {
 		initializer.Init(w)
 	}
+}
 
-	if subscriber, ok := s.(SubscriberSystem); ok {
-		subs := subscriber.GetSubscriptions()
-		for idx := range subs {
-			subs[idx] = w.AddSubscription(subs[idx].Filter)
-		}
+// AddSystem adds a system to the world. The System will become Active on the next World Update
+func (w *World) AddSystem(s System, activate bool) *World {
+	// make sure that we properly initialize the System
+	w.initializeSystem(s)
+
+	w.mutex.Lock()
+	w.Systems = append(w.Systems, s)
+
+	// add System to activation queue.
+	// Activating the system makes it tick automatically in its own thread
+	if activate {
+		w.systemActivationQueue = append(w.systemActivationQueue, func() {
+			s.Activate()
+		})
 	}
+	w.mutex.Unlock()
 
 	return w
 }
@@ -150,7 +163,18 @@ func (w *World) RemoveSystem(s System) *World {
 	return w
 }
 
-func (w *World) processRemoveQueue() {
+func (w *World) processSystemStartQueue() {
+	w.mutex.Lock()
+	defer w.mutex.Unlock()
+
+	for _, systemStartFunc := range w.systemActivationQueue {
+		systemStartFunc()
+	}
+
+	w.systemActivationQueue = nil
+}
+
+func (w *World) processRemoveQueues() {
 	w.mutex.Lock()
 	defer w.mutex.Unlock()
 
@@ -158,6 +182,7 @@ func (w *World) processRemoveQueue() {
 		for idx := range w.Systems {
 			if w.Systems[idx] == w.systemRemovalQueue[remIdx] {
 				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
+				w.systemRemovalQueue[remIdx].Deactivate()
 				break
 			}
 		}
@@ -176,7 +201,7 @@ func (w *World) processRemoveQueue() {
 			}
 		}
 
-		delete(w.ComponentFlags, id)
+		w.ComponentFlags.Delete(id)
 	}
 }
 
@@ -190,34 +215,9 @@ func (w *World) UpdateEntity(id EID) {
 func (w *World) Update(dt time.Duration) error {
 	w.TimeDelta = dt
 
-	for sysIdx := range w.Systems {
-		if !w.Systems[sysIdx].Active() {
-			continue
-		}
+	w.processSystemStartQueue()
 
-		if sys, ok := w.Systems[sysIdx].(SystemInitializer); ok {
-			if !sys.IsInitialized() {
-				if base, ok := sys.(baseSystem); ok {
-					base.bind(w)
-				}
-
-				sys.Init(w)
-				continue
-			}
-		}
-
-		if sys, ok := w.Systems[sysIdx].(SystemUpdater); ok {
-			sys.Update()
-			continue
-		}
-
-		if sys, ok := w.Systems[sysIdx].(SystemUpdaterTimed); ok {
-			sys.Update(dt)
-			continue
-		}
-	}
-
-	w.processRemoveQueue()
+	w.processRemoveQueues()
 
 	return nil
 }
@@ -271,10 +271,10 @@ func (w *World) AddSubscription(input interface{}) *Subscription {
 
 // NewEntity creates a new entity and Component BitSet
 func (w *World) NewEntity() EID {
-	atomic.AddUint64(&w.nextEntityID, 1)
-	w.ComponentFlags[w.nextEntityID] = &bitset.BitSet{}
+	nextId := atomic.AddUint64(w.nextEntityID, 1)
+	w.ComponentFlags.Store(nextId, &bitset.BitSet{})
 
-	return w.nextEntityID
+	return nextId
 }
 
 // RemoveEntity removes an entity
@@ -296,7 +296,12 @@ func (w *World) updateComponentFlags(id EID) {
 
 		// ... for the bit index that corresponds to the map id,
 		// use the true/false value we just obtained as the value for that bit in the bitset.
-		w.ComponentFlags[id].Set(int(w.factories[idx].ID()), found)
+		cf, cfFound := w.ComponentFlags.Load(id)
+		if !cfFound {
+			continue
+		}
+
+		cf.(*bitset.BitSet).Set(int(w.factories[idx].ID()), found)
 	}
 }
 
@@ -308,10 +313,18 @@ func (w *World) updateSubscriptions(id EID) {
 
 	w.updateComponentFlags(id)
 
+	cfInterface, found := w.ComponentFlags.Load(id)
+	if !found {
+		// uhhhhh
+		return
+	}
+
+	cf := cfInterface.(*bitset.BitSet)
+
 	for idx := range w.Subscriptions {
 		w.Subscriptions[idx].mutex.Lock()
 
-		if w.Subscriptions[idx].Filter.Allow(w.ComponentFlags[id]) {
+		if w.Subscriptions[idx].Filter.Allow(cf) {
 			w.Subscriptions[idx].AddEntity(id)
 		} else {
 			w.Subscriptions[idx].RemoveEntity(id)

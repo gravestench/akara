@@ -12,7 +12,7 @@ func TestComponentFilterBuilder(t *testing.T) {
 	Convey("Given an Arbitrary BitSet", t, func() {
 		bs := bitset.NewBitSet()
 
-		Convey("A component filter may be created with any combination of requirements/restrictions", func () {
+		Convey("A component filter may be created with any combination of requirements/restrictions", func() {
 			So(NewComponentFilter(bs, nil, nil), ShouldNotBeNil)
 			So(NewComponentFilter(nil, bs, nil), ShouldNotBeNil)
 			So(NewComponentFilter(nil, nil, bs), ShouldNotBeNil)

@@ -42,7 +42,7 @@ func (cf *ComponentFilter) Allow(other *bitset.BitSet) bool {
 		}
 	}
 
-	if cf.Forbidden != nil && !cf.Forbidden.Empty(){
+	if cf.Forbidden != nil && !cf.Forbidden.Empty() {
 		if cf.Forbidden.Intersects(other) {
 			return false
 		}

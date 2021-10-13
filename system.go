@@ -4,29 +4,35 @@ import "time"
 
 // System describes the bare minimum of what is considered a system
 type System interface {
+	Name() string
+
 	Active() bool
-	SetActive(bool)
-	Destroy()
+	Activate()
+	Deactivate()
+
+	Update()
+	Tick()
+	TickFrequency() float64
+	TickPeriod() time.Duration
+	SetTickFrequency(float64)
+	SetPreTickCallback(func())
+	SetPostTickCallback(func())
+	TickCount() uint
+	Uptime() time.Duration
 }
 
-type baseSystem interface {
-	System
-	bind(*World)
-}
-
-// SystemInitializer is a system with an Init method
-type SystemInitializer interface {
-	System
+type Initializer interface {
 	Init(*World)
 	IsInitialized() bool
 }
 
-type SystemUpdater interface {
-	System
-	Update()
+type baseSystem interface {
+	Init(*World, func())
 }
 
-type SystemUpdaterTimed interface {
-	System
-	Update(time.Duration)
+// hasBaseSystem describes a System that is composed of another type of System.
+// The Base method returns the System's base system.
+// That System's base system can also have its own base system, and so on, creating a composition tree or chain.
+type hasBaseSystem interface {
+	base() baseSystem
 }

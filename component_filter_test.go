@@ -10,7 +10,6 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-
 func randIndices(max int) []int {
 	count := max
 	ids := make([]int, count)
@@ -32,7 +31,7 @@ func TestComponentFilter_Allow(t *testing.T) {
 		A := bitset.NewBitSet(1, 2, 3)
 		B := bitset.NewBitSet(1, 2, 3, 4)
 
-		Convey("Where the filter imposes no requirements or restrictions", func () {
+		Convey("Where the filter imposes no requirements or restrictions", func() {
 			cf := NewComponentFilter(nil, nil, nil)
 
 			Convey("The filter will allow any bitset", func() {

@@ -18,6 +18,10 @@ func between(min, max float64) float64 {
 
 func Test_ExampleMovementSystem(t *testing.T) {
 	sys := &MovementSystem{}
+	systemTicks := 0
+	sys.SetPostTickCallback(func() {
+		systemTicks += 1
+	})
 
 	cfg := NewWorldConfig().With(sys)
 	world := NewWorld(cfg)
@@ -33,17 +37,17 @@ func Test_ExampleMovementSystem(t *testing.T) {
 		v.X, v.Y = between(-10, 10), between(-10, 10)
 	}
 
-	numUpdates := 4
-	const updateInterval = time.Second
+	world.Update(0)
 
-	for numUpdates > 0 {
-		fmt.Print("\nUpdate...\n")
-		err := world.Update(updateInterval)
-		if err != nil {
-			t.Errorf("failed to update world: %s", err)
+	numUpdates := 4
+	loopsWaited := 0
+	for systemTicks < numUpdates {
+		if loopsWaited > 5 {
 			t.Fail()
 		}
-		numUpdates--
+
+		time.Sleep(10 * time.Millisecond)
+		loopsWaited += 1
 	}
 }
 
@@ -100,26 +104,20 @@ var _ System = &MovementSystem{}
 
 // MovementSystem handles entity movement based on velocity and position components
 type MovementSystem struct {
-	BaseSubscriberSystem
+	BaseSystem
 	PositionFactory
 	VelocityFactory
 	movableEntities *Subscription
 	disableLog      bool
 }
 
-func (m *MovementSystem) IsInitialized() bool {
-	return true
-}
-
 // Init initializes the system with the given world
-func (m *MovementSystem) Init(world *World) {
-	m.World = world
-
-	filter := m.NewComponentFilter()
-	filter.Require(
-		&Position{},
-		&Velocity{},
-	).Build()
+func (m *MovementSystem) Init(_ *World) {
+	filter := m.NewComponentFilter().
+		Require(
+			&Position{},
+			&Velocity{},
+		).Build()
 
 	m.movableEntities = m.AddSubscription(filter)
 

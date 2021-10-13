@@ -4,7 +4,7 @@ import "sync"
 
 func newComponentFactory(id ComponentID) *ComponentFactory {
 	cf := &ComponentFactory{
-		id: id,
+		id:        id,
 		mux:       &sync.Mutex{},
 		instances: make(map[EID]Component),
 	}
@@ -13,11 +13,11 @@ func newComponentFactory(id ComponentID) *ComponentFactory {
 }
 
 type ComponentFactory struct {
-	world    *World
-	id       ComponentID
+	world     *World
+	id        ComponentID
 	instances map[EID]Component
-	provider func() Component
-	mux *sync.Mutex
+	provider  func() Component
+	mux       *sync.Mutex
 }
 
 func (b *ComponentFactory) ID() ComponentID {
