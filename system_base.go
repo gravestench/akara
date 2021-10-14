@@ -2,21 +2,27 @@ package akara
 
 import "time"
 
-// BaseSystem is the base system type
-type BaseSystem struct {
-	*World
+type timeManagement struct {
 	TimeDelta        time.Duration
-	active           bool
 	tickFrequency    float64
 	tickPeriod		 time.Duration
 	lastTick         time.Time
 	preTickCallback  func()
 	tickCallback	 func()
 	postTickCallback func()
+}
 
-	// debug data collection
+type systemDebugging struct {
 	tickCount uint
 	uptime time.Duration
+}
+
+// BaseSystem is the base system type
+type BaseSystem struct {
+	*World
+	timeManagement
+	systemDebugging
+	active           bool
 }
 
 var DefaultTickRate float64 = 100
