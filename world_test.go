@@ -92,6 +92,29 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			_, found = w.ComponentFlags.Load(e)
 			So(found, ShouldBeFalse)
 		})
+
+		Convey("Entities that are ignored by a subscription are not returned by the subscription", func() {
+			cid := w.RegisterComponent(&testComponent{})
+			testComponentFactory := &testComponentFactory{ComponentFactory: w.GetComponentFactory(cid)}
+
+			sub := w.AddSubscription(w.NewComponentFilter().Require(&testComponent{}).Build())
+
+			e := w.NewEntity()
+			testComponentFactory.Add(e)
+
+			So(len(sub.GetEntities()), ShouldEqual, 1)
+
+			_, found := w.ComponentFlags.Load(e)
+			So(found, ShouldBeTrue)
+
+			So(sub.EntityIsIgnored(e), ShouldBeFalse)
+
+			sub.IgnoreEntity(e)
+
+			So(len(sub.GetEntities()), ShouldEqual, 0)
+
+			So(sub.EntityIsIgnored(e), ShouldBeTrue)
+		})
 	})
 }
 

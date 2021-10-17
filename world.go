@@ -312,15 +312,15 @@ func (w *World) updateSubscriptions(id EID) {
 
 	cf := cfInterface.(*bitset.BitSet)
 
-	for idx := range w.Subscriptions {
-		w.Subscriptions[idx].mutex.Lock()
+	for _, subscription := range w.Subscriptions {
+		subscription.mutex.Lock()
 
-		if w.Subscriptions[idx].Filter.Allow(cf) {
-			w.Subscriptions[idx].AddEntity(id)
+		if subscription.Filter.Allow(cf) && !subscription.EntityIsIgnored(id) {
+			subscription.AddEntity(id)
 		} else {
-			w.Subscriptions[idx].RemoveEntity(id)
+			subscription.RemoveEntity(id)
 		}
 
-		w.Subscriptions[idx].mutex.Unlock()
+		subscription.mutex.Unlock()
 	}
 }

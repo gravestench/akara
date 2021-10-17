@@ -15,6 +15,7 @@ func NewSubscription(cf *ComponentFilter) *Subscription {
 		Filter:    cf,
 		entityMap: make(entityMap),
 		entities:  make([]EID, 0),
+		ignoredEntities: make(entityMap),
 	}
 }
 
@@ -24,6 +25,7 @@ type Subscription struct {
 	entityMap       // we use (abuse) the lookup ability of maps for adding/removing EIDs
 	entities  []EID // we sort the map keys when GetEntities is called, only if dirty==true
 	dirty     bool
+	ignoredEntities entityMap
 	mutex     sync.Mutex
 }
 
@@ -68,4 +70,16 @@ func (s *Subscription) rebuildCache() {
 	sort.Slice(s.entities, func(i, j int) bool {
 		return s.entities[i] < s.entities[j]
 	})
+}
+
+func (s *Subscription) IgnoreEntity(id EID) {
+	s.mutex.Lock()
+	s.ignoredEntities[id] = &empty{}
+	s.RemoveEntity(id)
+	s.mutex.Unlock()
+}
+
+func (s *Subscription) EntityIsIgnored(id EID) bool {
+	_, ok := s.ignoredEntities[id]
+	return ok
 }
