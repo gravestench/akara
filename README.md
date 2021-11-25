@@ -1,79 +1,116 @@
-# Golang Entity Component System
+# A Golang Entity Component System
 A Golang Entity Component System implementation
 
-## Foreword
-This module only provides a concrete implementation of a `World`, a `ComponentManager`, an
- `EntityManager`, and a couple of utility systems. You will need to create concrete
-  implementations of all components and "actual" systems
- and I'll describe how you should go about doing that below.
- 
- **If you really want to just see how this package is used, skip ahead to the Examples section.**
+ **If you really want to just see how to use this package, 
+ skip ahead to the Examples section.**
 
-### World
-The `World` contains the `EntityManager`, `ComponentManager`, and a slice of all `Systems`.
-The world is created using a `WorldConfig`, which is built from systems:
+## What is ECS?
+[Entity Component System is a design pattern.](https://en.wikipedia.org/wiki/Entity_component_system)
+ 
+In ECS, an entity represents _anything_, and is defined through composition  
+as opposed to inheritance. What this means is that an entity is composed of pieces,
+instead of defined with a class hierarchy. More concretely, this means that
+**an entity ends up being an identifier** that points to various "aspects" about the 
+entity. All "aspects" of an entity are expressed as components.
+
+In practice, **components store data, and hardly ever any logic**. Components
+express the various aspects of an entity; position, velocity, rotation, 
+scale, etc. 
+
+Systems end up being where most logic is located. Most systems
+will iterate over entities and use the entity's components for 
+performing whatever logic the system requires. Consider a `MovementSystem`, which 
+will operate upon all entities that have a `Position` and `Velocity` component.
+
+## Peculiarities about Akara
+There are several parts of Akara's API that are peculiar only to Akara.
+
+These things include the following:
+* The ECS `World`
+* Component registration
+* Component Factories
+* Component Subscription & Component Filters
+* System tick rates
+* _there's likely a lot more to list here, this doc needs editing..._
+
+Here are some big-picture ideas to keep in mind when working with Akara:
+* **Entities are literally just numbers (uint64's)**
+* **Components must be registered in the ECS world**
+* **Every entity has a `BitSet` that describes which components it has**
+* **There is only one component factory for any given component type**
+* **Systems are in charge of their own tick rate**
+
+### The ECS `World`
+The `World` is the single place where systems, components, and entities are stored
+and managed. The world is in charge of authoring entity ID's, registering components,
+creating and updating component subscriptions, etc.
+
+Here is a very simple example of creating a `World` and invoking the update loop:
 ```golang
-cfg := akara.NewWorldConfig().
-        With(&MovementSystem{}).
-        With(&RenderSystem{}).
-        With(&PhysicsSystem{})
+package main
 
-world := akara.NewWorld(cfg)
-```
+import (
+    "github.com/gravestench/akara"
 
-After the world is created, calling the `Update` method will call the `Process` methods of all of
- the systems
- ```golang
-elapsedTimeSinceLastUpdate = time.Millisecond * 16
-world.Update(durationSinceLastUpdate)
- ```
+    "github.com/example/project/systems/monster
+    "github.com/example/project/systems/itemspawn
+    "github.com/example/project/systems/magick
+)
 
-### Entities and the EntityManager
-Entities are just unique `uint64`'s. They are used to create associations with components
- (among other things...).
- 
-For now, all you need to know is that this is essentially what an entity is:
- ```golang
-// EID is an entity ID
-type EID = uint64
-```
+func main() {
+    cfg := akara.NewWorldConfig()
 
-The `EntityManager` is responsible for creating new entity IDs, as well as a `BitSet` for each
- entity. Bitsets describe which components an entity currently has. We will talk about BitSets later...
+    cfg.With(&monster.System{}).
+        With(&itemspawn.System{}).
+        With(&magick.System{})
 
-### Components & Component Factories
-`Components` only need to implement this interface:
- ```golang
-type Component interface {
-    New() Component
+    world := akara.NewWorld(cfg)
+
+    for {
+        if err := world.Update(); err != nil {
+            panic(err)
+        }
+    }
 }
 ```
 
+### Component registration
+Creating components in Akara requires registering the component withing a `World`.
+The `World` will only ever have a single component factory for any given component.
+
+Registering a component will do two things:
+1) associate a unique ID for the component type
+1) create an abstract component factory
+__________________
 Here's an example `Velocity` component:
+
 ```golang
 type Velocity struct {
 	x, y float64
 }
+```
 
+To make this implement the `akara.Component` interface, we need a `New` method:
+```golang
 func (*Velocity) New() akara.Component {
 	return &Velocity{}
 }
 ```
 
-Components must be registered in the ECS world. 
-The reason for this is because each distinct type of component is given a `ComponentID` internally.
-This ID ends up being used to keep track of what components each entity has.
-It's also used to retrieve a `ComponentFactory` instance:
+Now we can register the component:
 ```golang
+// this only yields the component ID
 velocityID := world.RegisterComponent(&Velocity{})
+```
+
+### Component Factories
+We could use the component ID to grab the abstract component factory:
+```golang
 factory := world.GetComponentFactory(velocityID)
 ```
 
 Component factories are used to create, retrieve, and remove components from entities:
 ```golang
-id := world.RegisterComponent(&Velocity{})
-factory := world.GetComponentFactory(id)
-
 e := world.NewEntity()
 
 // returns a akara.Component interface!
@@ -84,7 +121,7 @@ v := c.(*Velocity)
 ```
 
 Notice how we always have to cast the returned interface back to our concrete component implementation?
-We can get around this by making a concrete component factory:
+**We can get around this annoyance by making a concrete component factory**:
 ```golang
 type VelocityFactory struct {
 	*akara.ComponentFactory
@@ -108,12 +145,17 @@ this allows us to just use `Add` and `Get` without having to cast the returned v
 
 It's worth mentioning that each distinct component type that is registered will only have one
 component factory and one component ID.
+
+Here, we try to register the same component twice, but nothing bad happens:
 ```golang
 id1 := world.RegisterComponent(&Velocity{})
 id2 := world.RegisterComponent(&Velocity{})
 
 isSame := id1 == id2 // true 
 ```
+
+### Entities
+An Entity is just a unique `uint64`, nothing more.
 
  ### Systems
 Systems are fairly simple in that they need only implement this interface:
@@ -157,7 +199,7 @@ func (s *ExampleSystem) Process() {
 
 The second type of system is a `SubscriberSystem`, but before we talk about that we need to talk about subscriptions...
 
-### Subscriptions, ComponentFilters, and BitSets! Oh, my!
+### Component Subscription & Component Filters
 Before we can talk about `Subscription`s or `ComponentFilter`s, we need to know what a `BitSet` is.
 
 #### BitSets

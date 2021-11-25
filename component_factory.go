@@ -12,6 +12,12 @@ func newComponentFactory(id ComponentID) *ComponentFactory {
 	return cf
 }
 
+// ComponentFactory is used to manage a one-to-one mapping between entity ID's and
+// component instances. The factory is responsible for creating, retrieving, and deleting
+// components using a given component ID.
+//
+// Attempting to create more than one component for a given component ID will result
+// in nothing happening (the existing component instance will still exist).
 type ComponentFactory struct {
 	world     *World
 	id        ComponentID
@@ -20,49 +26,57 @@ type ComponentFactory struct {
 	mux       *sync.Mutex
 }
 
-func (b *ComponentFactory) ID() ComponentID {
-	return b.id
+// ID returns the registered component ID for this component type
+func (cf *ComponentFactory) ID() ComponentID {
+	return cf.id
 }
 
-func (b *ComponentFactory) factoryNew(id EID) Component {
-	instance := b.provider()
+func (cf *ComponentFactory) factoryNew(id EID) Component {
+	cf.instances[id] = cf.provider()
 
-	b.instances[id] = instance
-
-	return instance
+	return cf.instances[id]
 }
 
-func (m *ComponentFactory) Add(id EID) Component {
-	if c, found := m.Get(id); found {
+// Add a new component for the given entity ID and yield the component.
+// If a component already exists, yield the existing component.
+//
+// This operation will update world subscriptions for the given entity.
+func (cf *ComponentFactory) Add(id EID) Component {
+	if c, found := cf.Get(id); found {
 		return c
 	}
 
-	m.mux.Lock()
+	cf.mux.Lock()
 
-	c := m.factoryNew(id)
+	c := cf.factoryNew(id)
 
-	m.mux.Unlock()
+	cf.mux.Unlock()
 
-	m.world.UpdateEntity(id)
+	cf.world.UpdateEntity(id)
 
 	return c
 }
 
-func (m *ComponentFactory) Get(id EID) (Component, bool) {
-	m.mux.Lock()
-	defer m.mux.Unlock()
+// Get will yield the component and a bool, much like map retrieval.
+// The bool indicates whether a component was found for the given entity ID.
+// The component can be nil.
+func (cf *ComponentFactory) Get(id EID) (Component, bool) {
+	cf.mux.Lock()
+	defer cf.mux.Unlock()
 
-	c, found := m.instances[id]
+	c, found := cf.instances[id]
 
 	return c, found
 }
 
-func (m *ComponentFactory) Remove(id EID) {
-	m.mux.Lock()
+// Remove will destroy the component instance for the given entity ID.
+// This operation will update world subscriptions for the given entity ID.
+func (cf *ComponentFactory) Remove(id EID) {
+	cf.mux.Lock()
 
-	delete(m.instances, id)
+	delete(cf.instances, id)
 
-	m.mux.Unlock()
+	cf.mux.Unlock()
 
-	m.world.UpdateEntity(id)
+	cf.world.UpdateEntity(id)
 }

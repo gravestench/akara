@@ -30,6 +30,10 @@ func NewWorld(cfg *WorldConfig) *World {
 		},
 	}
 
+	if cfg == nil {
+		cfg = NewWorldConfig()
+	}
+
 	for _, system := range cfg.systems {
 		world.AddSystem(system, true)
 	}
@@ -106,12 +110,7 @@ func (w *World) GetComponentFactory(id ComponentID) *ComponentFactory {
 
 // NewComponentFilter creates a builder for creating
 func (w *World) NewComponentFilter() *ComponentFilterBuilder {
-	return &ComponentFilterBuilder{
-		world:      w,
-		require:    make([]Component, 0),
-		requireOne: make([]Component, 0),
-		forbid:     make([]Component, 0),
-	}
+	return NewComponentFilterBuilder(w)
 }
 
 // initializeSystem calls the System's Init method, and also calls the system's BaseSystem.Init() method, if
@@ -218,6 +217,7 @@ func (w *World) Update() error {
 func (w *World) AddSubscription(input interface{}) *Subscription {
 	var s *Subscription
 	var cf *ComponentFilter
+	var cfb *ComponentFilterBuilder
 
 	switch t := input.(type) {
 	case *Subscription:
@@ -225,6 +225,10 @@ func (w *World) AddSubscription(input interface{}) *Subscription {
 		cf = s.Filter
 	case *ComponentFilter:
 		cf = t
+		s = NewSubscription(cf)
+	case *ComponentFilterBuilder:
+		cfb = t
+		cf = cfb.Build()
 		s = NewSubscription(cf)
 	default:
 		return nil

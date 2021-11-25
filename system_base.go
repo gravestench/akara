@@ -66,30 +66,32 @@ func (s *BaseSystem) Activate() {
 	// prevent the system from thinking that the last tick was 1970-01-01...
 	s.lastTick = time.Now()
 
-	go func() {
-		// if the TickFrequency is set, try to tick that frequently. Otherwise, we tick as fast as we can
-		if s.TickFrequency() != 0 {
-			ticker := time.NewTicker(s.TickPeriod())
+	go s.startTicking()
+}
 
-			for range ticker.C {
-				if !s.Active() {
-					break
-				}
+func (s *BaseSystem) startTicking() {
+	// if the TickFrequency is set, try to tick that frequently. Otherwise, we tick as fast as we can
+	if s.TickFrequency() != 0 {
+		ticker := time.NewTicker(s.TickPeriod())
 
-				s.Tick()
+		for range ticker.C {
+			if !s.Active() {
+				break
 			}
 
-			ticker.Stop()
-		} else {
-			for {
-				if !s.Active() {
-					break
-				}
-
-				s.Tick()
-			}
+			s.Tick()
 		}
-	}()
+
+		ticker.Stop()
+	} else {
+		for {
+			if !s.Active() {
+				break
+			}
+
+			s.Tick()
+		}
+	}
 }
 
 // InjectComponent is shorthand for registering a component and placing the factory in the given destination

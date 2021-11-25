@@ -33,7 +33,7 @@ type Subscription struct {
 func (s *Subscription) AddEntity(id EID) {
 	if _, found := s.entityMap[id]; !found {
 		s.dirty = true
-		s.entityMap[id] = &empty{}
+		s.entityMap[id] = nil
 	}
 }
 

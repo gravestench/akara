@@ -4,13 +4,19 @@ import "time"
 
 // System describes the bare minimum of what is considered a system
 type System interface {
-	Name() string
+	systemInfo
+	systemControls
+	systemFrequencyControl
+	Update()
+}
 
+type systemControls interface {
 	Active() bool
 	Activate()
 	Deactivate()
+}
 
-	Update()
+type systemFrequencyControl interface {
 	Tick()
 	TickFrequency() float64
 	TickPeriod() time.Duration
@@ -18,6 +24,10 @@ type System interface {
 	SetPreTickCallback(func())
 	SetPostTickCallback(func())
 	TickCount() uint
+}
+
+type systemInfo interface {
+	Name() string
 	Uptime() time.Duration
 }
 

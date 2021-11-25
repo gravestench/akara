@@ -2,6 +2,17 @@ package akara
 
 import "github.com/gravestench/bitset"
 
+// NewComponentFilterBuilder creates a new builder for a component filter, using
+// the given world.
+func NewComponentFilterBuilder(w *World) *ComponentFilterBuilder {
+	return &ComponentFilterBuilder{
+		world:      w,
+		require:    make([]Component, 0),
+		requireOne: make([]Component, 0),
+		forbid:     make([]Component, 0),
+	}
+}
+
 // ComponentFilterBuilder creates a component filter config
 type ComponentFilterBuilder struct {
 	world      *World
@@ -10,35 +21,33 @@ type ComponentFilterBuilder struct {
 	forbid     []Component
 }
 
+// Build iterates through all components in the filter and registers them in the world,
+// to ensure that all components have a unique Component ID. Then, the bitsets for
+// Required, OneRequired, and Forbidden bits are set in the corresponding bitsets of the filter.
 func (cfb *ComponentFilterBuilder) Build() *ComponentFilter {
-	bs := bitset.NewBitSet()
-	f := &ComponentFilter{}
+	f := &ComponentFilter{
+		Required:    bitset.NewBitSet(),
+		OneRequired: bitset.NewBitSet(),
+		Forbidden:   bitset.NewBitSet(),
+	}
 
 	for idx := range cfb.require {
 		componentID := cfb.world.RegisterComponent(cfb.require[idx])
 
-		bs.Set(int(componentID), true)
+		f.Required.Set(int(componentID), true)
 	}
-
-	f.Required = bs.Clone()
-	bs.Clear()
 
 	for idx := range cfb.requireOne {
 		componentID := cfb.world.RegisterComponent(cfb.requireOne[idx])
 
-		bs.Set(int(componentID), true)
+		f.OneRequired.Set(int(componentID), true)
 	}
-
-	f.OneRequired = bs.Clone()
-	bs.Clear()
 
 	for idx := range cfb.forbid {
 		componentID := cfb.world.RegisterComponent(cfb.forbid[idx])
 
-		bs.Set(int(componentID), true)
+		f.Forbidden.Set(int(componentID), true)
 	}
-
-	f.Forbidden = bs
 
 	return f
 }
