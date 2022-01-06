@@ -50,27 +50,27 @@ Here is a very simple example of creating a `World` and invoking the update loop
 package main
 
 import (
-    "github.com/gravestench/akara"
+	"github.com/gravestench/akara"
 
-    "github.com/example/project/systems/monster
-    "github.com/example/project/systems/itemspawn
-    "github.com/example/project/systems/magick
+	"github.com/example/project/systems/magick"
+	"github.com/example/project/systems/monster"
+	"github.com/example/project/systems/itemspawn"
 )
 
 func main() {
-    cfg := akara.NewWorldConfig()
+	cfg := akara.NewWorldConfig()
 
-    cfg.With(&monster.System{}).
-        With(&itemspawn.System{}).
-        With(&magick.System{})
+	cfg.With(&monster.System{}).
+		With(&itemspawn.System{}).
+		With(&magick.System{})
 
-    world := akara.NewWorld(cfg)
+	world := akara.NewWorld(cfg)
 
-    for {
-        if err := world.Update(); err != nil {
-            panic(err)
-        }
-    }
+	for {
+		if err := world.Update(); err != nil {
+			panic(err)
+		}
+	}
 }
 ```
 
@@ -189,11 +189,11 @@ func (s *BaseSystem) SetActive(b bool) {
 You can embed the `BaseSystem` in your own system like this:
 ```golang
 type ExampleSystem struct {
-    *BaseSystem
+	*BaseSystem
 }
 
 func (s *ExampleSystem) Process() {
-    // do stuff
+	// do stuff
 }
 ```
 
@@ -318,9 +318,9 @@ func (m *VelocityFactory) Get(id akara.EID) (*Velocity, bool) {
 cfg := akara.NewFilter()
 
 cfg.Require(
-    components.Position, 
-    components.Velocity,
-    )
+	components.Position,
+	components.Velocity,
+)
 
 filter := cfg.Build()
 ```
@@ -337,12 +337,12 @@ As of writing, there is no general guide for how subscriptions are managed, but 
 and giving them descriptive names is sufficient.
 ```golang
 type MovementSystem struct {
-    akara.SubscriberSystem
-    components struct {
-        positions   PositionFactory
-        velocities  VelocityFactory
-    }
-    movingEntities []akara.EID
+	akara.SubscriberSystem
+	components struct {
+		positions   PositionFactory
+		velocities  VelocityFactory
+	}
+	movingEntities []akara.EID
 }
 ```
 
@@ -357,16 +357,16 @@ func (m *MovementSystem) Init(world *akara.World) {
 		return
 	}
 
-    m.setupComponents()
-    m.setupSubscriptions()
+	m.setupComponents()
+	m.setupSubscriptions()
 }
 ```
 
 Here, we use `BaseSystem.InjectComponent`, which registers a component and assigns a component factory to the given destination.
 ```golang
 func (m *MovementSystem) setupComponents() {
-    m.InjectComponent(&Position{}, &m.components.Position.ComponentFactory)
-    m.InjectComponent(&Velocity{}, &m.components.Velocity.ComponentFactory)
+	m.InjectComponent(&Position{}, &m.components.Position.ComponentFactory)
+	m.InjectComponent(&Velocity{}, &m.components.Velocity.ComponentFactory)
 }
 ```
 
@@ -374,12 +374,12 @@ Here, we set up our only subscription. For this example, our `MovementSystem` is
 `Position` and `Velocity` components.
 ```golang
 func (m *MovementSystem) setupSubscriptions() {
-    filterBuilder := m.NewComponentFilter()
-    
-    filterBuilder.Require(&Position{})
-    filterBuilder.Require(&Velocity{})
+	filterBuilder := m.NewComponentFilter()
 
-    filter := filterBuilder.Build()
+	filterBuilder.Require(&Position{})
+	filterBuilder.Require(&Velocity{})
+
+	filter := filterBuilder.Build()
 
 	m.movingEntities = m.World.AddSubscription(filter)
 }
@@ -390,7 +390,7 @@ Remember, as components are added and removed from entities, _all subscriptions 
 ```golang
 func (m *MovementSystem) Update() {
 	for _, eid := range m.movingEntities.GetEntities() {
-        m.moveEntity(eid)
+		m.moveEntity(eid)
 	}
 }
 ```
