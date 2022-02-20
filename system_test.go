@@ -24,7 +24,7 @@ func TestBaseSystem_TickFrequency(t *testing.T) {
 			So(sys.TickFrequency(), ShouldEqual, 100)
 
 			Convey("The tick period is calculated correctly", func() {
-				So(sys.TickPeriod(), ShouldEqual, 10 * time.Millisecond)
+				So(sys.TickPeriod(), ShouldEqual, 10*time.Millisecond)
 			})
 		})
 	})
@@ -35,7 +35,7 @@ func TestSystem(t *testing.T) {
 	var sys *MyTestSystem
 
 	Convey("Given an ECS World", t, func() {
-		w = NewWorld(NewWorldConfig())
+		w = NewWorld()
 
 		Convey("A World starts with no Systems", func() {
 			So(len(w.Systems), ShouldEqual, 0)

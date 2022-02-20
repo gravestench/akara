@@ -1,18 +1,21 @@
 package akara
 
 import (
-	"github.com/gravestench/bitset"
 	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	"github.com/gravestench/bitset"
 )
 
 type componentRegistry = map[string]ComponentID
 type componentFactories = map[ComponentID]*ComponentFactory
 
-// NewWorld creates a new world instance
-func NewWorld(cfg *WorldConfig) *World {
+// NewWorld creates a new world instance from the given world configs
+func NewWorld(optional ...*WorldConfig) *World {
+	cfg := NewWorldConfig() // default
+
 	world := &World{
 		entityManagement: &entityManagement{
 			nextEntityID:       new(uint64),
@@ -30,8 +33,8 @@ func NewWorld(cfg *WorldConfig) *World {
 		},
 	}
 
-	if cfg == nil {
-		cfg = NewWorldConfig()
+	if optional != nil && optional[0] != nil {
+		cfg = optional[0]
 	}
 
 	for _, system := range cfg.systems {

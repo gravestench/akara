@@ -9,7 +9,7 @@ import (
 
 func TestWorld_NewEntity(t *testing.T) {
 	Convey("For a given ECS world", t, func() {
-		w := NewWorld(NewWorldConfig())
+		w := NewWorld()
 
 		first := w.NewEntity()
 
@@ -30,7 +30,7 @@ func TestWorld_NewEntity(t *testing.T) {
 
 func TestWorld_RemoveEntity(t *testing.T) {
 	Convey("For a given ECS world", t, func() {
-		w := NewWorld(NewWorldConfig())
+		w := NewWorld()
 
 		Convey("An entity can always be removed, even if it does not exist", func() {
 			_, found := w.ComponentFlags.Load(EntityID(1))
