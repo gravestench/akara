@@ -1,13 +1,14 @@
-package akara
+package tests
 
 import (
+	"github.com/gravestench/akara"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 	"time"
 )
 
 type MyTestSystem struct {
-	BaseSystem
+	akara.BaseSystem
 	Ticks int
 }
 
@@ -31,11 +32,11 @@ func TestBaseSystem_TickFrequency(t *testing.T) {
 }
 
 func TestSystem(t *testing.T) {
-	var w *World
+	var w *akara.World
 	var sys *MyTestSystem
 
 	Convey("Given an ECS World", t, func() {
-		w = NewWorld()
+		w = akara.NewWorld()
 
 		Convey("A World starts with no Systems", func() {
 			So(len(w.Systems), ShouldEqual, 0)
@@ -53,11 +54,11 @@ func TestSystem(t *testing.T) {
 			So(sys.Active(), ShouldBeFalse)
 
 			Convey("An unaltered System has the default tick rate", func() {
-				So(sys.TickFrequency(), ShouldEqual, DefaultTickRate)
+				So(sys.TickFrequency(), ShouldEqual, akara.DefaultTickRate)
 			})
 
 			Convey("We can change the System's tick rate", func() {
-				So(sys.TickFrequency(), ShouldEqual, DefaultTickRate)
+				So(sys.TickFrequency(), ShouldEqual, akara.DefaultTickRate)
 				sys.SetTickFrequency(999)
 				So(sys.TickFrequency(), ShouldEqual, 999)
 			})

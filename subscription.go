@@ -12,21 +12,21 @@ type empty struct{} // intentionally empty!
 // NewSubscription creates a new subscription with the given component filter
 func NewSubscription(cf *ComponentFilter) *Subscription {
 	return &Subscription{
-		Filter:    cf,
-		entityMap: make(entityMap),
-		entities:  make([]EID, 0),
+		Filter:          cf,
+		entityMap:       make(entityMap),
+		entities:        make([]EID, 0),
 		ignoredEntities: make(entityMap),
 	}
 }
 
 // Subscription is a component filter and a slice of entity ID's for which the filter applies
 type Subscription struct {
-	Filter    *ComponentFilter
-	entityMap       // we use (abuse) the lookup ability of maps for adding/removing EIDs
-	entities  []EID // we sort the map keys when GetEntities is called, only if dirty==true
-	dirty     bool
+	Filter          *ComponentFilter
+	entityMap             // we use (abuse) the lookup ability of maps for adding/removing EIDs
+	entities        []EID // we sort the map keys when GetEntities is called, only if dirty==true
+	dirty           bool
 	ignoredEntities entityMap
-	mutex     sync.Mutex
+	mutex           sync.Mutex
 }
 
 // AddEntity adds an entity to the subscription entity map

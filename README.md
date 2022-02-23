@@ -1,8 +1,12 @@
 # A Golang Entity Component System
 A Golang Entity Component System implementation
 
+## tl;dr
  **If you really want to just see how to use this package, 
  skip ahead to the Examples section.**
+
+This ECS implementation provides at-runtime entityy/component association
+without heavy use of reflection.
 
 ## What is ECS?
 [Entity Component System is a design pattern.](https://en.wikipedia.org/wiki/Entity_component_system)
@@ -163,7 +167,7 @@ Systems are fairly simple in that they need only implement this interface:
  type System interface {
  	Active() bool
  	SetActive(bool)
- 	Process()
+ 	Update()
  }
 ```
 
@@ -192,7 +196,7 @@ type ExampleSystem struct {
 	*BaseSystem
 }
 
-func (s *ExampleSystem) Process() {
+func (s *ExampleSystem) Update() {
 	// do stuff
 }
 ```

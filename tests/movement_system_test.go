@@ -1,7 +1,8 @@
-package akara
+package tests
 
 import (
 	"fmt"
+	"github.com/gravestench/akara"
 	"math"
 	"math/rand"
 	"testing"
@@ -23,8 +24,8 @@ func Test_ExampleMovementSystem(t *testing.T) {
 		systemTicks += 1
 	})
 
-	cfg := NewWorldConfig().With(sys)
-	world := NewWorld(cfg)
+	cfg := akara.NewWorldConfig().With(sys)
+	world := akara.NewWorld(cfg)
 
 	const numEntities = 4
 
@@ -72,8 +73,8 @@ func Bench_ExampleMovementSystemN(numEntities int, b *testing.B) {
 
 	sys.disableLog = true
 
-	cfg := NewWorldConfig().With(sys)
-	world := NewWorld(cfg)
+	cfg := akara.NewWorldConfig().With(sys)
+	world := akara.NewWorld(cfg)
 
 	for idx := 0; idx < numEntities; idx++ {
 		e := world.NewEntity()
@@ -96,19 +97,19 @@ func Bench_ExampleMovementSystemN(numEntities int, b *testing.B) {
 }
 
 // static check that MovementSystem implements the System interface
-var _ System = &MovementSystem{}
+var _ akara.System = &MovementSystem{}
 
 // MovementSystem handles entity movement based on velocity and position components
 type MovementSystem struct {
-	BaseSystem
+	akara.BaseSystem
 	PositionFactory
 	VelocityFactory
-	movableEntities *Subscription
+	movableEntities *akara.Subscription
 	disableLog      bool
 }
 
 // Init initializes the system with the given world
-func (m *MovementSystem) Init(_ *World) {
+func (m *MovementSystem) Init(_ *akara.World) {
 	filter := m.NewComponentFilter().
 		Require(
 			&Position{},
@@ -134,7 +135,7 @@ func (m *MovementSystem) Update() {
 }
 
 // move updates an individual entity in the movement system
-func (m *MovementSystem) move(id EID) {
+func (m *MovementSystem) move(id akara.EID) {
 	p, found := m.GetPosition(id)
 	if !found {
 		return
@@ -159,7 +160,7 @@ func (m *MovementSystem) move(id EID) {
 }
 
 // static check that Velocity implements Component
-var _ Component = &Velocity{}
+var _ akara.Component = &Velocity{}
 
 // Velocity contains an embedded velocity as a vector
 type Velocity struct {
@@ -167,29 +168,29 @@ type Velocity struct {
 }
 
 // New creates a new Velocity. By default, the velocity is (0,0).
-func (*Velocity) New() Component {
+func (*Velocity) New() akara.Component {
 	return &Velocity{}
 }
 
 // VelocityFactory is a wrapper for the generic component factory that returns Velocity component instances.
 // This can be embedded inside of a system to give them the methods for adding, retrieving, and removing a Velocity.
 type VelocityFactory struct {
-	Velocity *ComponentFactory
+	Velocity *akara.ComponentFactory
 }
 
 // AddVelocity adds a Velocity component to the given entity and returns it
-func (m *VelocityFactory) AddVelocity(id EID) *Velocity {
+func (m *VelocityFactory) AddVelocity(id akara.EID) *Velocity {
 	return m.Velocity.Add(id).(*Velocity)
 }
 
 // GetVelocity returns the Velocity component for the given entity, and a bool for whether or not it exists
-func (m *VelocityFactory) GetVelocity(id EID) (*Velocity, bool) {
+func (m *VelocityFactory) GetVelocity(id akara.EID) (*Velocity, bool) {
 	component, found := m.Velocity.Get(id)
 	return component.(*Velocity), found
 }
 
 // static check that Position implements Component
-var _ Component = &Position{}
+var _ akara.Component = &Position{}
 
 // Position contains an embedded d2vector.Position, which is a vector with
 // helper methods for translating between screen, isometric, tile, and sub-tile space.
@@ -198,23 +199,23 @@ type Position struct {
 }
 
 // New creates a new Position. By default, the position is (0,0)
-func (*Position) New() Component {
+func (*Position) New() akara.Component {
 	return &Position{}
 }
 
 // PositionFactory is a wrapper for the generic component factory that returns Position component instances.
 // This can be embedded inside of a system to give them the methods for adding, retrieving, and removing a Position.
 type PositionFactory struct {
-	Position *ComponentFactory
+	Position *akara.ComponentFactory
 }
 
 // AddPosition adds a Position component to the given entity and returns it
-func (m *PositionFactory) AddPosition(id EID) *Position {
+func (m *PositionFactory) AddPosition(id akara.EID) *Position {
 	return m.Position.Add(id).(*Position)
 }
 
 // GetPosition returns the Position component for the given entity, and a bool for whether or not it exists
-func (m *PositionFactory) GetPosition(id EID) (*Position, bool) {
+func (m *PositionFactory) GetPosition(id akara.EID) (*Position, bool) {
 	component, found := m.Position.Get(id)
 	return component.(*Position), found
 }

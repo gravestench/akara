@@ -5,16 +5,16 @@ import "time"
 type timeManagement struct {
 	TimeDelta        time.Duration
 	tickFrequency    float64
-	tickPeriod		 time.Duration
+	tickPeriod       time.Duration
 	lastTick         time.Time
 	preTickCallback  func()
-	tickCallback	 func()
+	tickCallback     func()
 	postTickCallback func()
 }
 
 type systemDebugging struct {
 	tickCount uint
-	uptime time.Duration
+	uptime    time.Duration
 }
 
 // BaseSystem is the base system type
@@ -22,7 +22,7 @@ type BaseSystem struct {
 	*World
 	timeManagement
 	systemDebugging
-	active           bool
+	active bool
 }
 
 var DefaultTickRate float64 = 100

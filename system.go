@@ -6,11 +6,15 @@ import "time"
 type System interface {
 	systemInfo
 	systemControls
-	systemFrequencyControl
 	Update()
 }
 
 type systemControls interface {
+	systemStatusControls
+	systemFrequencyControl
+}
+
+type systemStatusControls interface {
 	Active() bool
 	Activate()
 	Deactivate()

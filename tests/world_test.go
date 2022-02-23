@@ -1,6 +1,7 @@
-package akara
+package tests
 
 import (
+	"github.com/gravestench/akara"
 	"testing"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 
 func TestWorld_NewEntity(t *testing.T) {
 	Convey("For a given ECS world", t, func() {
-		w := NewWorld()
+		w := akara.NewWorld()
 
 		first := w.NewEntity()
 
@@ -30,35 +31,35 @@ func TestWorld_NewEntity(t *testing.T) {
 
 func TestWorld_RemoveEntity(t *testing.T) {
 	Convey("For a given ECS world", t, func() {
-		w := NewWorld()
+		w := akara.NewWorld()
 
 		Convey("An entity can always be removed, even if it does not exist", func() {
-			_, found := w.ComponentFlags.Load(EntityID(1))
+			_, found := w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeFalse)
 
 			w.RemoveEntity(0)
 
-			_, found = w.ComponentFlags.Load(EntityID(1))
+			_, found = w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeFalse)
 		})
 
 		Convey("An entity can be removed", func() {
 			e := w.NewEntity()
 
-			_, found := w.ComponentFlags.Load(EntityID(1))
+			_, found := w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeTrue)
 
 			w.RemoveEntity(e)
 			w.Update()
 
-			_, found = w.ComponentFlags.Load(EntityID(1))
+			_, found = w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeFalse)
 		})
 
 		Convey("An entity can be removed more than once", func() {
 			e := w.NewEntity()
 
-			_, found := w.ComponentFlags.Load(EntityID(1))
+			_, found := w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeTrue)
 
 			w.RemoveEntity(e)
@@ -66,7 +67,7 @@ func TestWorld_RemoveEntity(t *testing.T) {
 			w.RemoveEntity(e)
 			w.Update()
 
-			_, found = w.ComponentFlags.Load(EntityID(1))
+			_, found = w.ComponentFlags.Load(akara.EntityID(1))
 			So(found, ShouldBeFalse)
 		})
 
@@ -119,14 +120,14 @@ func TestWorld_RemoveEntity(t *testing.T) {
 }
 
 type testComponentFactory struct {
-	*ComponentFactory
+	*akara.ComponentFactory
 }
 
-func (m *testComponentFactory) Add(id EID) *testComponent {
+func (m *testComponentFactory) Add(id akara.E) *testComponent {
 	return m.ComponentFactory.Add(id).(*testComponent)
 }
 
-func (m *testComponentFactory) Get(id EID) (*testComponent, bool) {
+func (m *testComponentFactory) Get(id akara.E) (*testComponent, bool) {
 	component, found := m.ComponentFactory.Get(id)
 	if !found {
 		return nil, found

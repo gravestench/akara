@@ -1,7 +1,8 @@
-package akara
+package tests
 
 import (
 	"fmt"
+	"github.com/gravestench/akara"
 	"github.com/gravestench/bitset"
 	"math"
 	"math/rand"
@@ -32,7 +33,7 @@ func TestComponentFilter_Allow(t *testing.T) {
 		B := bitset.NewBitSet(1, 2, 3, 4)
 
 		Convey("Where the filter imposes no requirements or restrictions", func() {
-			cf := NewComponentFilter(nil, nil, nil)
+			cf := akara.NewComponentFilter(nil, nil, nil)
 
 			Convey("The filter will allow any bitset", func() {
 				So(cf.Allow(A), ShouldEqual, true)
@@ -41,7 +42,7 @@ func TestComponentFilter_Allow(t *testing.T) {
 		})
 
 		Convey("With a ComponentFilter that requires all bits from BitSet A", func() {
-			cf1 := NewComponentFilter(A, nil, nil)
+			cf1 := akara.NewComponentFilter(A, nil, nil)
 
 			Convey("the component filter should allow bitset A", func() {
 				So(cf1.Allow(A), ShouldEqual, true)
@@ -53,7 +54,7 @@ func TestComponentFilter_Allow(t *testing.T) {
 		})
 
 		Convey("With a ComponentFilter that requires all bits from BitSet B", func() {
-			cf1 := NewComponentFilter(B, nil, nil)
+			cf1 := akara.NewComponentFilter(B, nil, nil)
 
 			Convey("the component filter should NOT allow bitset A", func() {
 				So(cf1.Allow(A), ShouldEqual, false)
@@ -70,7 +71,7 @@ func TestComponentFilter_Equals(t *testing.T) {
 	bs1 := bitset.NewBitSet(1, 2, 3)
 	bs2 := bitset.NewBitSet(1, 2, 3, 4)
 
-	cf1 := NewComponentFilter(bs1, nil, nil)
+	cf1 := akara.NewComponentFilter(bs1, nil, nil)
 
 	if !cf1.Allow(bs2) {
 		t.Error("component filter should allow bitset which is superset of it's Required bitset")
@@ -84,7 +85,7 @@ func benchComponentFilterAllow(i int, b *testing.B) {
 	bs1 := bitset.NewBitSet(randIndices(i)...)
 	bs2 := bitset.NewBitSet(randIndices(i)...)
 	bs3 := bitset.NewBitSet(randIndices(i)...)
-	cf1 := NewComponentFilter(bs1, bs2, bs3)
+	cf1 := akara.NewComponentFilter(bs1, bs2, bs3)
 
 	// ... then we need to reset the timer...
 	b.ResetTimer()
@@ -112,8 +113,8 @@ func benchComponentFilterEquals(i int, b *testing.B) {
 	bs5 := bitset.NewBitSet(randIndices(i)...)
 	bs6 := bitset.NewBitSet(randIndices(i)...)
 
-	cf1 := NewComponentFilter(bs1, bs2, bs3)
-	cf2 := NewComponentFilter(bs4, bs5, bs6)
+	cf1 := akara.NewComponentFilter(bs1, bs2, bs3)
+	cf2 := akara.NewComponentFilter(bs4, bs5, bs6)
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {

@@ -1,7 +1,8 @@
-package akara
+package tests
 
 import (
 	"fmt"
+	"github.com/gravestench/akara"
 	"math"
 	"math/rand"
 	"testing"
@@ -13,9 +14,9 @@ func TestComponentFactory_Add_Get_Remove(t *testing.T) {
 	rand.Seed(int64(0xdeadbeef))
 
 	Convey("Within an ECS world", t, func() {
-		cfg := NewWorldConfig().With(nil)
-		w := NewWorld(cfg)
-		var e EID
+		cfg := akara.NewWorldConfig().With(nil)
+		w := akara.NewWorld(cfg)
+		var e akara.EID
 
 		Convey("Where there exists a registered component type with Component ID 0", func() {
 			cid := w.RegisterComponent(&testComponent{})
@@ -54,8 +55,8 @@ func TestComponentFactory_Add_Get_Remove(t *testing.T) {
 func benchComMapAdd(_ int, b *testing.B) {
 	rand.Seed(int64(0xdeadbeef))
 
-	cfg := NewWorldConfig().With(nil)
-	w := NewWorld(cfg)
+	cfg := akara.NewWorldConfig().With(nil)
+	w := akara.NewWorld(cfg)
 	cid := w.RegisterComponent(&testComponent{})
 	cf := w.GetComponentFactory(cid)
 
@@ -68,8 +69,8 @@ func benchComMapAdd(_ int, b *testing.B) {
 func benchComMapGet(i int, b *testing.B) {
 	rand.Seed(int64(0xdeadbeef))
 
-	cfg := NewWorldConfig().With(nil)
-	w := NewWorld(cfg)
+	cfg := akara.NewWorldConfig().With(nil)
+	w := akara.NewWorld(cfg)
 	cid := w.RegisterComponent(&testComponent{})
 	cf := w.GetComponentFactory(cid)
 
@@ -79,19 +80,19 @@ func benchComMapGet(i int, b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		cf.Get(EID(n % i))
+		cf.Get(akara.EID(n % i))
 	}
 }
 
 func benchComMapRemove(i int, b *testing.B) {
 	rand.Seed(int64(0xdeadbeef))
 
-	cfg := NewWorldConfig().With(nil)
-	w := NewWorld(cfg)
+	cfg := akara.NewWorldConfig().With(nil)
+	w := akara.NewWorld(cfg)
 	cf := w.GetComponentFactory(w.RegisterComponent(&testComponent{}))
 
 	randNums := randIndices(i)
-	eids := make([]EID, len(randNums))
+	eids := make([]akara.EID, len(randNums))
 
 	for idx := range randNums {
 		eids[idx] = w.NewEntity()
@@ -135,6 +136,6 @@ func BenchmarkComponentFactory_RemoveAll(b *testing.B) {
 
 type testComponent struct{}
 
-func (c *testComponent) New() Component {
+func (c *testComponent) New() akara.Component {
 	return &testComponent{}
 }
