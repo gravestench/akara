@@ -89,7 +89,7 @@ func (w *World) RegisterComponent(c Component) ComponentID {
 		return id
 	}
 
-	nextId := atomic.AddUint64(w.nextEntityID, 1)
+	nextId := atomic.AddUint64(w.nextFactoryID, 1)
 	factory := newComponentFactory(ComponentID(nextId))
 	factory.world = w
 
