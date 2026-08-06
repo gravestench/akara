@@ -1,432 +1,231 @@
-# A Golang Entity Component System
-A Golang Entity Component System implementation
+# Akara
 
-## tl;dr
- **If you really want to just see how to use this package, 
- skip ahead to the Examples section.**
+Akara is a small, typed entity-component-system runtime for Go. Components are
+ordinary Go data, component stores are generic, subscriptions update immediately,
+and systems run deterministically in registration order.
 
-This ECS implementation provides at-runtime entityy/component association
-without heavy use of reflection.
+Akara deliberately does not require component interfaces, constructor methods,
+factory wrappers, runtime casts, or public bit masks.
 
-## What is ECS?
-[Entity Component System is a design pattern.](https://en.wikipedia.org/wiki/Entity_component_system)
- 
-In ECS, an entity represents _anything_, and is defined through composition  
-as opposed to inheritance. What this means is that an entity is composed of pieces,
-instead of defined with a class hierarchy. More concretely, this means that
-**an entity ends up being an identifier** that points to various "aspects" about the 
-entity. All "aspects" of an entity are expressed as components.
+## Components
 
-In practice, **components store data, and hardly ever any logic**. Components
-express the various aspects of an entity; position, velocity, rotation, 
-scale, etc. 
+Define components as plain data:
 
-Systems end up being where most logic is located. Most systems
-will iterate over entities and use the entity's components for 
-performing whatever logic the system requires. Consider a `MovementSystem`, which 
-will operate upon all entities that have a `Position` and `Velocity` component.
-
-## Peculiarities about Akara
-There are several parts of Akara's API that are peculiar only to Akara.
-
-These things include the following:
-* The ECS `World`
-* Component registration
-* Component Factories
-* Component Subscription & Component Filters
-* System tick rates
-* _there's likely a lot more to list here, this doc needs editing..._
-
-Here are some big-picture ideas to keep in mind when working with Akara:
-* **Entities are literally just numbers (uint64's)**
-* **Components must be registered in the ECS world**
-* **Every entity has a `BitSet` that describes which components it has**
-* **There is only one component factory for any given component type**
-* **Systems are in charge of their own tick rate**
-
-### The ECS `World`
-The `World` is the single place where systems, components, and entities are stored
-and managed. The world is in charge of authoring entity ID's, registering components,
-creating and updating component subscriptions, etc.
-
-Here is a very simple example of creating a `World` and invoking the update loop:
-```golang
-package main
-
-import (
-	"github.com/gravestench/akara"
-
-	"github.com/example/project/systems/magick"
-	"github.com/example/project/systems/monster"
-	"github.com/example/project/systems/itemspawn"
-)
-
-func main() {
-	cfg := akara.NewWorldConfig()
-
-	cfg.With(&monster.System{}).
-		With(&itemspawn.System{}).
-		With(&magick.System{})
-
-	world := akara.NewWorld(cfg)
-
-	for {
-		if err := world.Update(); err != nil {
-			panic(err)
-		}
-	}
+```go
+type Position struct {
+	X, Y float64
 }
-```
 
-### Component registration
-Creating components in Akara requires registering the component withing a `World`.
-The `World` will only ever have a single component factory for any given component.
-
-Registering a component will do two things:
-1) associate a unique ID for the component type
-1) create an abstract component factory
-__________________
-Here's an example `Velocity` component:
-
-```golang
 type Velocity struct {
-	x, y float64
+	X, Y float64
 }
 ```
 
-To make this implement the `akara.Component` interface, we need a `New` method:
-```golang
-func (*Velocity) New() akara.Component {
-	return &Velocity{}
+Register each type once during application composition:
+
+```go
+world := akara.NewWorld()
+defer world.Close()
+
+positions := akara.Register[Position](world)
+velocities := akara.Register[Velocity](world)
+```
+
+`Register[T]` is idempotent. Every call for the same type and world returns the
+same `*Store[T]`. Code that does not participate in registration can look up an
+existing handle without registering implicitly:
+
+```go
+positions, found := akara.GetStore[Position](world)
+if !found {
+	return errors.New("Position was not registered")
 }
 ```
 
-Now we can register the component:
-```golang
-// this only yields the component ID
-velocityID := world.RegisterComponent(&Velocity{})
-```
+## Entities and stores
 
-### Component Factories
-We could use the component ID to grab the abstract component factory:
-```golang
-factory := world.GetComponentFactory(velocityID)
-```
-
-Component factories are used to create, retrieve, and remove components from entities:
-```golang
-e := world.NewEntity()
-
-// returns a akara.Component interface!
-c := factory.Add(e) 
-
-// we must cast the interface to our concrete component type
-v := c.(*Velocity) 
-```
-
-Notice how we always have to cast the returned interface back to our concrete component implementation?
-**We can get around this annoyance by making a concrete component factory**:
-```golang
-type VelocityFactory struct {
-	*akara.ComponentFactory
+```go
+entity, err := world.CreateEntity()
+if err != nil {
+	return err
 }
 
-func (m *VelocityFactory) Add(id akara.EID) *Velocity {
-	return m.ComponentFactory.Add(id).(*Velocity)
+position, err := positions.Add(entity)
+if err != nil {
+	return err
+}
+position.X = 10
+
+velocity, err := velocities.Set(entity, Velocity{X: 4, Y: -2})
+if err != nil {
+	return err
 }
 
-func (m *VelocityFactory) Get(id akara.EID) (*Velocity, bool) {
-	component, found := m.ComponentFactory.Get(id)
-	if !found {
-		return nil, found
-	}
-
-	return component.(*Velocity), found
-}
+position, found := positions.Get(entity)
+removed := velocities.Remove(entity)
+destroyed := world.DestroyEntity(entity)
 ```
 
-this allows us to just use `Add` and `Get` without having to cast the returned value.
+`Add` creates the component's zero value or returns the existing pointer. `Set`
+replaces it with a copied value. Adding a component to an unknown entity returns
+`ErrEntityNotFound`; orphan components cannot be created.
 
-It's worth mentioning that each distinct component type that is registered will only have one
-component factory and one component ID.
+`DestroyEntity` immediately removes every component and subscription membership.
+Entity IDs are world-local, begin at one, and are never reused.
 
-Here, we try to register the same component twice, but nothing bad happens:
-```golang
-id1 := world.RegisterComponent(&Velocity{})
-id2 := world.RegisterComponent(&Velocity{})
+Stores and ECS indexes are safe for concurrent use. A component pointer returned
+by `Add`, `Set`, or `Get` is ordinary application data: callers must coordinate
+concurrent field mutation themselves.
 
-isSame := id1 == id2 // true 
-```
+## Sharing store handles
 
-### Entities
-An Entity is just a unique `uint64`, nothing more.
+Prefer explicit dependency injection. A small application registry makes system
+dependencies visible and avoids service-location during updates:
 
- ### Systems
-Systems are fairly simple in that they need only implement this interface:
- ```golang
- type System interface {
- 	Active() bool
- 	SetActive(bool)
- 	Update()
- }
-```
-
-However, there are a couple of concrete system types provided which you can use to create your own
- systems.
- 
-The first is `BaseSystem`, and it has its own `Active` and `SetActive` methods.
- ```golang
-type BaseSystem struct {
-	*World
-	active bool
+```go
+type Components struct {
+	Positions  *akara.Store[Position]
+	Velocities *akara.Store[Velocity]
 }
 
-func (s *BaseSystem) Active() bool {
-	return s.active
-}
-
-func (s *BaseSystem) SetActive(b bool) {
-	s.active = b
-} 
-```
-
-You can embed the `BaseSystem` in your own system like this:
-```golang
-type ExampleSystem struct {
-	*BaseSystem
-}
-
-func (s *ExampleSystem) Update() {
-	// do stuff
-}
-```
-
-The second type of system is a `SubscriberSystem`, but before we talk about that we need to talk about subscriptions...
-
-### Component Subscription & Component Filters
-Before we can talk about `Subscription`s or `ComponentFilter`s, we need to know what a `BitSet` is.
-
-#### BitSets
-BitSets are just a bunch of booleans, packed up in a slice of `uint64`'s.
-```golang
-type BitSet struct {
-	groups []uint64
-}
-```
-
-These are used by the EntityManager to signify which components an entity currently has
-. **Whenever a ComponentMap adds or removes a component for an entity, the EntityManager will
- update the entity's bitset**.
- 
- Remember how the Component types all have a unique ID? That ID corresponds to
-  the bit index that is toggled in the BitSet when a component is being added or removed!
-
-#### ComponentFilters
-ComponentFilters also use BitSets, but they use them for comparisons against an entity bitset
-.
-```golang
-type ComponentFilter struct {
-	Required    *BitSet
-	OneRequired *BitSet
-	Forbidden   *BitSet
-}
-```
-
-When an entity bitset is evaluated by a ComponentFilter, each of the Filter's Bitsets is used
-to determine if the entity should be allowed to pass through the filter.
-
-When determining if an entity's component bitset will pass through the ComponentFilter:
- - **Required** -- The entity bitset must contain `true` bits for all `true` bits present in the
-  Required bitset.
- - **OneRequired** -- The entity bitset must have at least one `true` bit in common with the
-  `OneRequired` BitSet
- - **Forbidden** -- The entity bitset must **not** contain any `true` bits for any `true` bits
-  present in the `Forbidden` bitset
-
-#### Subscriptions
-Subscriptions are simply a combination of a ComponentFilter and a slice of entity ID's:
-```golang
-type Subscription struct {
-	Filter          *ComponentFilter
-	entities        []EID
-}
-```
-
-As Components are added and removed from entities, the entity manager will pass the updated entity
- bitset to the subscription. If the entity bitset passes through the subscription's filter, the
-  entity ID is added to the slice of entities for that subscription.
-  
-  This leads us to the second utility system that is provided... The `SubscriberSystem`!
-```golang
-type SubscriberSystem struct {
-	*BaseSystem
-	Subscriptions []*Subscription
-}
-```
-
-## Examples
-
-#### Creating a world
-```golang
-// make a world config
-cfg := akara.NewWorldConfig()
-
-// add systems to the config
-cfg.With(&MovementSystem{})
-
-// create a world instance using the world config
-world := akara.NewWorld(cfg) 
-```
-
-#### Declaring a Component
-Here is the bare minimum required to create a new component:
-```golang
-type Velocity struct {
-	*Vector3
-}
-
-func (*Velocity) New() akara.Component {
-	return &Velocity{
-		Vector3: NewVector3(0, 0, 0),
+func RegisterComponents(world *akara.World) Components {
+	return Components{
+		Positions:  akara.Register[Position](world),
+		Velocities: akara.Register[Velocity](world),
 	}
 }
 ```
-Initialization logic specific to this component (like creating instances of another *struct) belongs 
-inside of the `New` method. 
 
-#### Concrete Component Factories
-A concrete component factory is just a wrapper for the generic component factory, 
-but it casts the returned values from `Add` and `Get` to the concrete component implementation.
-This is just to prevent you from having to cast the component interface to struct pointers.
-```golang
-type VelocityFactory struct {
-	*akara.ComponentFactory
-}
+Pass `Components` or the individual stores to system constructors. Use
+`GetStore[T]` for occasional lookup across package boundaries.
 
-func (m *VelocityFactory) Add(id akara.EID) *Velocity {
-	return m.ComponentFactory.Add(id).(*Velocity)
-}
+## Subscriptions
 
-func (m *VelocityFactory) Get(id akara.EID) (*Velocity, bool) {
-	component, found := m.ComponentFactory.Get(id)
-	if !found {
-		return nil, found
-	}
+Subscriptions accept typed store handles directly:
 
-	return component.(*Velocity), found
-}
-```
-
-#### Creating a ComponentFilter
-```golang
-cfg := akara.NewFilter()
-
-cfg.Require(
-	components.Position,
-	components.Velocity,
+```go
+moving, err := world.Subscribe(
+	akara.All(positions, velocities),
+	akara.Any(playerControlled, aiControlled),
+	akara.None(frozen),
 )
+if err != nil {
+	return err
+}
+defer moving.Close()
 
-filter := cfg.Build()
+for _, entity := range moving.Entities() {
+	position, _ := positions.Get(entity)
+	velocity, _ := velocities.Get(entity)
+	// Update component data.
+}
 ```
 
-#### Example System (with Subscriptions!)
-For systems that use subscriptions, it is recommended that you embed an `akara.BaseSubscriberSystem` as it 
-provides the generic methods for dealing with subscriptions. It also contains an `akara.BaseSystem`, which has other
-generic system methods.
+- `All` requires every supplied component.
+- `Any` requires at least one supplied component.
+- `None` forbids every supplied component.
+- An empty filter matches every entity.
 
-It is also recommended that all component factories be placed inside of a common struct and given explicit names.
-This helps to keep the code clear when writing complicated systems.
+Membership changes immediately when components are added or removed. `Entities`
+returns a sorted snapshot, making iteration stable even if the world changes later.
+A filter cannot accidentally use a store from another world; `Subscribe` returns
+`ErrForeignComponent`.
 
-As of writing, there is no general guide for how subscriptions are managed, but just embedding them in the system struct
-and giving them descriptive names is sufficient.
-```golang
+Subscriptions are independent. `Ignore` and `Include` affect only that subscription.
+Call `Close` when a subscription is no longer needed.
+
+## Deterministic systems
+
+Akara does not start background tick goroutines. The application supplies delta
+time, and systems run sequentially in registration order:
+
+```go
 type MovementSystem struct {
-	akara.SubscriberSystem
-	components struct {
-		positions   PositionFactory
-		velocities  VelocityFactory
+	positions *akara.Store[Position]
+	velocities *akara.Store[Velocity]
+	moving *akara.Subscription
+}
+
+func (system *MovementSystem) Update(_ *akara.World, delta time.Duration) error {
+	seconds := delta.Seconds()
+	for _, entity := range system.moving.Entities() {
+		position, _ := system.positions.Get(entity)
+		velocity, _ := system.velocities.Get(entity)
+		position.X += velocity.X * seconds
+		position.Y += velocity.Y * seconds
 	}
-	movingEntities []akara.EID
+	return nil
+}
+
+movement := &MovementSystem{
+	positions: positions,
+	velocities: velocities,
+	moving: moving,
+}
+
+systemID, err := world.AddSystem(movement)
+if err != nil {
+	return err
+}
+
+if err := world.Update(frameDelta); err != nil {
+	return err
 }
 ```
 
-As of writing, all systems should set their `World` and call `SetActive(false)` if world is nil. 
-After that, actual system initialization logic is added: 
-```golang
-func (m *MovementSystem) Init(world *akara.World) {
-	m.World = world
+`SystemFunc` adapts functions to `System`. `RemoveSystem` uses the `SystemID`
+returned by registration. An update stops and wraps the first system error.
+Concurrent calls to `Update` are serialized.
 
-	if world == nil {
-		m.SetActive(false)
-		return
-	}
+## Lifecycle
 
-	m.setupComponents()
-	m.setupSubscriptions()
-}
+`NewWorldWithContext` binds world shutdown to context cancellation:
+
+```go
+world := akara.NewWorldWithContext(gameContext)
+defer world.Close()
 ```
 
-Here, we use `BaseSystem.InjectComponent`, which registers a component and assigns a component factory to the given destination.
-```golang
-func (m *MovementSystem) setupComponents() {
-	m.InjectComponent(&Position{}, &m.components.Position.ComponentFactory)
-	m.InjectComponent(&Velocity{}, &m.components.Velocity.ComponentFactory)
-}
-```
+`Close` is idempotent. It closes `Done` and rejects subsequent mutations,
+subscriptions, system registration, and updates with `ErrWorldClosed`. Existing
+component values remain readable for diagnostics or shutdown persistence.
 
-Here, we set up our only subscription. For this example, our `MovementSystem` is interested in
-`Position` and `Velocity` components.
-```golang
-func (m *MovementSystem) setupSubscriptions() {
-	filterBuilder := m.NewComponentFilter()
+## Application integration
 
-	filterBuilder.Require(&Position{})
-	filterBuilder.Require(&Velocity{})
+Create one world and one typed component registry in the application's composition
+root. Construct systems with explicit store dependencies, register them in the desired
+simulation order, and call `world.Update(delta)` from the main loop. This produces
+deterministic component ownership without scheduler goroutines or hidden registration.
 
-	filter := filterBuilder.Build()
+Entity IDs and component handles are runtime-local. Save games and network protocols
+should use stable application IDs and schema names rather than Akara internals.
 
-	m.movingEntities = m.World.AddSubscription(filter)
-}
-```
+## Internal representation
 
-Our `Update` method is simple; we iterate over entities that are in our subscription. 
-Remember, as components are added and removed from entities, _all subscriptions are updated_.
-```golang
-func (m *MovementSystem) Update() {
-	for _, eid := range m.movingEntities.GetEntities() {
-		m.moveEntity(eid)
-	}
-}
-```
+Akara interns each distinct component combination as an archetype. Every entity
+holds one archetype pointer; entities with the same component types share one dense
+component mask. Adding or removing a component moves the entity along a cached
+archetype transition edge.
 
-This is where our system actually does work. For the given incoming entity id, we retreive 
-the position and velocity components and apply the velocity to the position. If either of those 
-components does not exist for the entity, we return. 
-```golang
-func (m *MovementSystem) moveEntity(id akara.EID) {
-	position, found := m.components.positions.Get(id)
-	if !found {
-		return
-	}
+Subscriptions cache matching archetypes rather than duplicating an entity-membership
+map. A filter is evaluated once when a new archetype appears, after which all entities
+in that archetype match implicitly.
 
-	velocity, found := m.components.velocities.Get(id)
-	if !found {
-		return
-	}
+This design supports large component registries without allocating a mask per entity.
+For example, a 10,000-type registry needs roughly 1.25 KB for a fully expanded mask,
+but that mask is paid once per used component combination rather than once per entity.
+Unused registered types consume no entity-mask memory. `ArchetypeCount` is available
+for diagnostics.
 
-	s := float64(m.World.TimeDelta) / float64(time.Second)
-	position.Vector.Add(velocity.Vector.Clone().Scale(s))
-}
-```
+The mask and archetype graph are private implementation details. Akara has no
+dependency on the standalone BitSet module and can change representations without
+affecting application code.
 
-#### Example: Static Checks for Interface Implementation
-Wherever you define components and systems, it's good practice to add static checks. These prevent
-you from compiling if things don't implement the interfaces that they should.
-```golang
-// static check that MovementSystem implements the System interface
-var _ akara.System = &MovementSystem{}
-```
-```golang
-// static check that PositionComponent implements Component
-var _ akara.Component = &PositionComponent{}
+## Development
+
+```bash
+go test ./...
+go test -race ./...
+go vet ./...
+go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4 run ./...
 ```

@@ -1,52 +1,104 @@
 package akara
 
-import "time"
+import (
+	"fmt"
+	"reflect"
+	"time"
+)
 
-// System describes the bare minimum of what is considered a system
+// System advances one part of a simulation. World.Update invokes systems
+// sequentially in registration order.
 type System interface {
-	systemInfo
-	systemControls
-	Update()
+	Update(*World, time.Duration) error
 }
 
-type systemControls interface {
-	systemStatusControls
-	systemFrequencyControl
+// SystemFunc adapts a function to System.
+type SystemFunc func(*World, time.Duration) error
+
+func (function SystemFunc) Update(world *World, delta time.Duration) error {
+	return function(world, delta)
 }
 
-type systemStatusControls interface {
-	Active() bool
-	Activate()
-	Deactivate()
+// SystemID identifies one system registration in a world.
+type SystemID uint64
+
+type systemEntry struct {
+	id     SystemID
+	system System
 }
 
-type systemFrequencyControl interface {
-	Tick()
-	TickFrequency() float64
-	TickPeriod() time.Duration
-	SetTickFrequency(float64)
-	SetPreTickCallback(func())
-	SetPostTickCallback(func())
-	TickCount() uint
+// AddSystem appends system to the deterministic update order.
+func (world *World) AddSystem(system System) (SystemID, error) {
+	if system == nil || isNilSystem(system) {
+		return 0, ErrNilSystem
+	}
+	world.systemsMu.Lock()
+	defer world.systemsMu.Unlock()
+	if world.closed.Load() {
+		return 0, ErrWorldClosed
+	}
+	world.nextSystemID++
+	if world.nextSystemID == 0 {
+		return 0, ErrSystemIDExhausted
+	}
+	id := world.nextSystemID
+	world.systems = append(world.systems, systemEntry{id: id, system: system})
+	return id, nil
 }
 
-type systemInfo interface {
-	Name() string
-	Uptime() time.Duration
+// RemoveSystem removes a registration and reports whether it existed. A system
+// removed during Update will not run on the next update.
+func (world *World) RemoveSystem(id SystemID) bool {
+	world.systemsMu.Lock()
+	defer world.systemsMu.Unlock()
+	for index, entry := range world.systems {
+		if entry.id == id {
+			world.systems = append(world.systems[:index], world.systems[index+1:]...)
+			return true
+		}
+	}
+	return false
 }
 
-type Initializer interface {
-	Init(*World)
-	IsInitialized() bool
+// Update runs a stable snapshot of systems sequentially. Concurrent Update calls
+// are serialized.
+func (world *World) Update(delta time.Duration) error {
+	world.updateMu.Lock()
+	defer world.updateMu.Unlock()
+	if world.closed.Load() {
+		return ErrWorldClosed
+	}
+	world.systemsMu.RLock()
+	systems := append([]systemEntry(nil), world.systems...)
+	world.systemsMu.RUnlock()
+	for _, entry := range systems {
+		if world.closed.Load() {
+			return ErrWorldClosed
+		}
+		if err := entry.system.Update(world, delta); err != nil {
+			return fmt.Errorf("akara: system %d update: %w", entry.id, err)
+		}
+	}
+	return nil
 }
 
-type baseSystem interface {
-	Init(*World, func())
+func isNilSystem(system System) bool {
+	value := reflect.ValueOf(system)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Ptr, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
+	}
 }
 
-// hasBaseSystem describes a System that is composed of another type of System.
-// The Base method returns the System's base system.
-// That System's base system can also have its own base system, and so on, creating a composition tree or chain.
-type hasBaseSystem interface {
-	base() baseSystem
+// Systems returns the registered IDs in update order.
+func (world *World) Systems() []SystemID {
+	world.systemsMu.RLock()
+	ids := make([]SystemID, len(world.systems))
+	for index, entry := range world.systems {
+		ids[index] = entry.id
+	}
+	world.systemsMu.RUnlock()
+	return ids
 }

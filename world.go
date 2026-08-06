@@ -1,333 +1,168 @@
 package akara
 
 import (
+	"context"
+	"errors"
 	"reflect"
-	"strings"
+	"sort"
 	"sync"
 	"sync/atomic"
-
-	"github.com/gravestench/bitset"
 )
 
-type componentRegistry = map[string]ComponentID
-type componentFactories = map[ComponentID]*ComponentFactory
+var (
+	ErrWorldClosed       = errors.New("akara: world is closed")
+	ErrEntityNotFound    = errors.New("akara: entity does not exist")
+	ErrForeignComponent  = errors.New("akara: component belongs to another world")
+	ErrNilComponent      = errors.New("akara: component handle is nil")
+	ErrNilSystem         = errors.New("akara: system is nil")
+	ErrEntityIDExhausted = errors.New("akara: entity ID space exhausted")
+	ErrSystemIDExhausted = errors.New("akara: system ID space exhausted")
+)
 
-// NewWorld creates a new world instance from the given world configs
-func NewWorld(optional ...*WorldConfig) *World {
-	cfg := NewWorldConfig() // default
+// Entity is a world-local entity identifier. Zero is never a valid entity.
+type Entity uint64
 
+type entityState struct{ archetype *archetype }
+
+// World owns entities, component stores, subscriptions, and deterministic systems.
+type World struct {
+	mutationMu     sync.Mutex
+	entities       map[Entity]entityState
+	nextEntityID   atomic.Uint64
+	registryMu     sync.RWMutex
+	storesByType   map[reflect.Type]componentStore
+	stores         []componentStore
+	subscriptions  map[*Subscription]struct{}
+	archetypes     map[uint64][]*archetype
+	archetypeCount int
+	emptyArchetype *archetype
+	systemsMu      sync.RWMutex
+	systems        []systemEntry
+	nextSystemID   SystemID
+	updateMu       sync.Mutex
+	closed         atomic.Bool
+	closeOnce      sync.Once
+	done           chan struct{}
+}
+
+// NewWorld creates an empty world.
+func NewWorld() *World {
 	world := &World{
-		entityManagement: &entityManagement{
-			nextEntityID:       new(uint64),
-			Subscriptions:      make([]*Subscription, 0),
-			entityRemovalQueue: make([]EID, 0),
-		},
-		componentManagement: &componentManagement{
-			nextFactoryID: new(uint64),
-			registry:      make(componentRegistry),
-			factories:     make(componentFactories),
-		},
-		systemManagement: &systemManagement{
-			Systems:            make([]System, 0),
-			systemRemovalQueue: make([]System, 0),
-		},
+		entities:      make(map[Entity]entityState),
+		storesByType:  make(map[reflect.Type]componentStore),
+		subscriptions: make(map[*Subscription]struct{}),
+		archetypes:    make(map[uint64][]*archetype),
+		done:          make(chan struct{}),
 	}
-
-	if optional != nil && optional[0] != nil {
-		cfg = optional[0]
-	}
-
-	for _, system := range cfg.systems {
-		world.AddSystem(system, true)
-	}
-
-	for _, c := range cfg.components {
-		world.RegisterComponent(c)
-	}
-
+	world.emptyArchetype = world.internArchetypeLocked(nil)
 	return world
 }
 
-type componentManagement struct {
-	registry      componentRegistry
-	factories     componentFactories
-	nextFactoryID *uint64
-}
-
-type entityManagement struct {
-	nextEntityID       *uint64
-	ComponentFlags     sync.Map // map[EID]*bitset.BitSet // bitset for each entity, shows what components the entity has
-	Subscriptions      []*Subscription
-	entityRemovalQueue []EID
-}
-
-type systemManagement struct {
-	Systems               []System
-	systemActivationQueue []func()
-	systemRemovalQueue    []System
-}
-
-// World contains all of the Entities, Components, and Systems
-type World struct {
-	*entityManagement
-	*componentManagement
-	*systemManagement
-	// mutex locks access to various World resources to maintain thread safety.
-	// This should be locked when accessing any shared World resources, like slices and maps
-	mutex sync.Mutex
-}
-
-// RegisterComponent registers a component type, assigning and returning its component ID
-func (w *World) RegisterComponent(c Component) ComponentID {
-	name := strings.ToLower(reflect.TypeOf(c).Elem().Name())
-
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	id, found := w.registry[name]
-	if found {
-		return id
+// NewWorldWithContext closes its world when ctx is canceled.
+func NewWorldWithContext(ctx context.Context) *World {
+	if ctx == nil {
+		panic("akara: nil context")
 	}
-
-	nextId := atomic.AddUint64(w.nextFactoryID, 1)
-	factory := newComponentFactory(ComponentID(nextId))
-	factory.world = w
-
-	factory.provider = func() Component {
-		return c.New()
-	}
-
-	w.registry[name] = factory.id
-	w.factories[factory.id] = factory
-
-	return factory.id
-}
-
-// GetComponentFactory returns the ComponentFactory for the given ComponentID
-func (w *World) GetComponentFactory(id ComponentID) *ComponentFactory {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	return w.factories[id]
-}
-
-// NewComponentFilter creates a builder for creating
-func (w *World) NewComponentFilter() *ComponentFilterBuilder {
-	return NewComponentFilterBuilder(w)
-}
-
-// initializeSystem calls the System's Init method, and also calls the system's BaseSystem.Init() method, if
-// the system is derived from the BaseSystem.
-func (w *World) initializeSystem(s System) {
-	if baseContainer, ok := s.(hasBaseSystem); ok {
-		baseContainer.base().Init(w, s.Update)
-	}
-
-	if initializer, ok := s.(Initializer); ok {
-		initializer.Init(w)
-	}
-}
-
-// AddSystem adds a system to the world. The System will become Active on the next World Update
-func (w *World) AddSystem(s System, activate bool) *World {
-	// make sure that we properly initialize the System
-	w.initializeSystem(s)
-
-	w.mutex.Lock()
-	w.Systems = append(w.Systems, s)
-
-	// add System to activation queue.
-	// Activating the system makes it tick automatically in its own thread
-	if activate {
-		w.systemActivationQueue = append(w.systemActivationQueue, func() {
-			s.Activate()
-		})
-	}
-	w.mutex.Unlock()
-
-	return w
-}
-
-// RemoveSystem queues the given system for removal
-func (w *World) RemoveSystem(s System) *World {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	w.systemRemovalQueue = append(w.systemRemovalQueue, s)
-
-	return w
-}
-
-func (w *World) processSystemStartQueue() {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	for _, systemStartFunc := range w.systemActivationQueue {
-		systemStartFunc()
-	}
-
-	w.systemActivationQueue = nil
-}
-
-func (w *World) processRemoveQueues() {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	for remIdx := range w.systemRemovalQueue {
-		for idx := range w.Systems {
-			if w.Systems[idx] == w.systemRemovalQueue[remIdx] {
-				w.Systems = append(w.Systems[:idx], w.Systems[idx+1:]...)
-				w.systemRemovalQueue[remIdx].Deactivate()
-				break
-			}
+	world := NewWorld()
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = world.Close()
+		case <-world.Done():
 		}
-	}
-
-	for _, id := range w.entityRemovalQueue {
-		for subIdx := range w.Subscriptions {
-			for entIdx := range w.Subscriptions[subIdx].entities {
-				if w.Subscriptions[subIdx].entities[entIdx] == id {
-					w.Subscriptions[subIdx].entities = append(
-						w.Subscriptions[subIdx].entities[:entIdx],
-						w.Subscriptions[subIdx].entities[entIdx+1:]...,
-					)
-					break
-				}
-			}
-		}
-
-		w.ComponentFlags.Delete(id)
-	}
+	}()
+	return world
 }
 
-// UpdateEntity updates the entity in the world. This causes the entity manager to
-// update all subscriptions for this entity ID.
-func (w *World) UpdateEntity(id EID) {
-	w.updateSubscriptions(id)
+// CreateEntity creates an entity with no components.
+func (world *World) CreateEntity() (Entity, error) {
+	world.mutationMu.Lock()
+	defer world.mutationMu.Unlock()
+	if world.closed.Load() {
+		return 0, ErrWorldClosed
+	}
+	entity := Entity(world.nextEntityID.Add(1))
+	if entity == 0 {
+		return 0, ErrEntityIDExhausted
+	}
+	state := entityState{archetype: world.emptyArchetype}
+	world.entities[entity] = state
+	world.emptyArchetype.entities[entity] = struct{}{}
+	return entity, nil
 }
 
-// Update iterates through all Systems and calls the update method if the system is active
-func (w *World) Update() error {
-	w.processSystemStartQueue()
-
-	w.processRemoveQueues()
-
-	return nil
+// MustCreateEntity creates an entity or panics. It is convenient during trusted
+// world construction; runtime code should generally use CreateEntity.
+func (world *World) MustCreateEntity() Entity {
+	entity, err := world.CreateEntity()
+	if err != nil {
+		panic(err)
+	}
+	return entity
 }
 
-// AddSubscription will look for an identical component filter and return an existing
-// subscription if it can. Otherwise, it creates a new subscription and returns it.
-func (w *World) AddSubscription(input interface{}) *Subscription {
-	var s *Subscription
-	var cf *ComponentFilter
-	var cfb *ComponentFilterBuilder
-
-	switch t := input.(type) {
-	case *Subscription:
-		s = t
-		cf = s.Filter
-	case *ComponentFilter:
-		cf = t
-		s = NewSubscription(cf)
-	case *ComponentFilterBuilder:
-		cfb = t
-		cf = cfb.Build()
-		s = NewSubscription(cf)
-	default:
-		return nil
+// DestroyEntity immediately removes an entity, all its components, and all its
+// subscription memberships.
+func (world *World) DestroyEntity(entity Entity) bool {
+	world.mutationMu.Lock()
+	defer world.mutationMu.Unlock()
+	if world.closed.Load() {
+		return false
 	}
-
-	for subIdx := range w.Subscriptions {
-		if w.Subscriptions[subIdx].Filter.Equals(cf) {
-			return w.Subscriptions[subIdx]
-		}
-	}
-
-	w.Subscriptions = append(w.Subscriptions, s)
-
-	// need to inform new subscriptions about existing entities
-	for _, cid := range cf.Required.ToIntArray() {
-		for eid := range w.factories[ComponentID(cid)].instances {
-			w.UpdateEntity(eid)
-		}
-	}
-
-	for _, cid := range cf.OneRequired.ToIntArray() {
-		for eid := range w.factories[ComponentID(cid)].instances {
-			w.UpdateEntity(eid)
-		}
-	}
-
-	for _, cid := range cf.Forbidden.ToIntArray() {
-		for eid := range w.factories[ComponentID(cid)].instances {
-			w.UpdateEntity(eid)
-		}
-	}
-
-	return s
-}
-
-// NewEntity creates a new entity and Component BitSet
-func (w *World) NewEntity() EID {
-	nextId := atomic.AddUint64(w.nextEntityID, 1)
-	w.ComponentFlags.Store(nextId, &bitset.BitSet{})
-
-	return nextId
-}
-
-// RemoveEntity removes an entity
-func (w *World) RemoveEntity(id EID) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	w.entityRemovalQueue = append(w.entityRemovalQueue, id)
-
-}
-
-// UpdateComponentFlags updates the component bitset for the entity.
-// The bitset just says which components an entity currently has.
-func (w *World) updateComponentFlags(id EID) {
-	// for each component map ...
-	for idx := range w.factories {
-		// ... check if the entity has a component in this component map ...
-		_, found := w.factories[idx].Get(id)
-
-		// ... for the bit index that corresponds to the map id,
-		// use the true/false value we just obtained as the value for that bit in the bitset.
-		cf, cfFound := w.ComponentFlags.Load(id)
-		if !cfFound {
-			continue
-		}
-
-		cf.(*bitset.BitSet).Set(int(w.factories[idx].ID()), found)
-	}
-}
-
-// updateSubscriptions will iterate through all subscriptions and add the entity id
-// to the subscription if the entity can pass through the subscription filter
-func (w *World) updateSubscriptions(id EID) {
-	w.mutex.Lock()
-	defer w.mutex.Unlock()
-
-	w.updateComponentFlags(id)
-
-	cfInterface, found := w.ComponentFlags.Load(id)
+	state, found := world.entities[entity]
 	if !found {
-		// uhhhhh
-		return
+		return false
 	}
+	state.archetype.mask.eachSet(func(id uint32) { world.stores[id].removeLocked(entity) })
+	delete(state.archetype.entities, entity)
+	delete(world.entities, entity)
+	return true
+}
 
-	cf := cfInterface.(*bitset.BitSet)
+// EntityExists reports whether entity is live.
+func (world *World) EntityExists(entity Entity) bool {
+	world.mutationMu.Lock()
+	_, found := world.entities[entity]
+	world.mutationMu.Unlock()
+	return found
+}
 
-	for _, subscription := range w.Subscriptions {
-		subscription.mutex.Lock()
+// Entities returns all live entity IDs in ascending order.
+func (world *World) Entities() []Entity {
+	world.mutationMu.Lock()
+	entities := make([]Entity, 0, len(world.entities))
+	for entity := range world.entities {
+		entities = append(entities, entity)
+	}
+	world.mutationMu.Unlock()
+	sort.Slice(entities, func(i, j int) bool { return entities[i] < entities[j] })
+	return entities
+}
 
-		if subscription.Filter.Allow(cf) && !subscription.EntityIsIgnored(id) {
-			subscription.AddEntity(id)
-		} else {
-			subscription.RemoveEntity(id)
+// Closed reports whether Close has been called.
+func (world *World) Closed() bool { return world.closed.Load() }
+
+// Done closes when the world closes.
+func (world *World) Done() <-chan struct{} { return world.done }
+
+// Close permanently closes the world. Existing component data remains readable,
+// while mutation, subscription creation, and updates are rejected.
+func (world *World) Close() error {
+	world.closeOnce.Do(func() {
+		world.mutationMu.Lock()
+		world.systemsMu.Lock()
+		world.closed.Store(true)
+		close(world.done)
+		world.systemsMu.Unlock()
+		for subscription := range world.subscriptions {
+			subscription.mu.Lock()
+			subscription.closed = true
+			subscription.archetypes = nil
+			subscription.ignored = nil
+			subscription.mu.Unlock()
 		}
-
-		subscription.mutex.Unlock()
-	}
+		world.subscriptions = make(map[*Subscription]struct{})
+		world.mutationMu.Unlock()
+	})
+	return nil
 }
