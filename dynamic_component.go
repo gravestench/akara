@@ -198,6 +198,25 @@ func GetDynamicStore(world *World, name string) (*DynamicStore, bool) {
 	return store, found
 }
 
+// DynamicStores returns the world's runtime-defined component stores ordered by
+// stable schema name. The returned slice is detached from the registry; stores
+// remain owned by the world.
+func DynamicStores(world *World) []*DynamicStore {
+	if world == nil {
+		return nil
+	}
+	world.registryMu.RLock()
+	stores := make([]*DynamicStore, 0, len(world.storesByName))
+	for _, store := range world.storesByName {
+		stores = append(stores, store)
+	}
+	world.registryMu.RUnlock()
+	sort.Slice(stores, func(i, j int) bool {
+		return stores[i].schema.Name < stores[j].schema.Name
+	})
+	return stores
+}
+
 func compileSchema(schema Schema) (compiledSchema, error) {
 	schema.Name = strings.TrimSpace(schema.Name)
 	if schema.Name == "" {

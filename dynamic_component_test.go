@@ -76,6 +76,30 @@ func TestDynamicSchemaRegistrationAndValidation(t *testing.T) {
 	}
 }
 
+func TestDynamicStoresAreSortedRegistrySnapshot(t *testing.T) {
+	world := NewWorld()
+	defer world.Close()
+	second, err := RegisterSchema(world, Schema{Name: "world.velocity"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := RegisterSchema(world, Schema{Name: "world.position"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stores := DynamicStores(world)
+	if len(stores) != 2 || stores[0] != first || stores[1] != second {
+		t.Fatalf("stores = %v", stores)
+	}
+	stores[0] = nil
+	if got := DynamicStores(world); len(got) != 2 || got[0] != first {
+		t.Fatalf("registry changed through returned slice: %v", got)
+	}
+	if DynamicStores(nil) != nil {
+		t.Fatal("nil world returned stores")
+	}
+}
+
 func TestDynamicReferenceInvalidatedByReplacementAndRemoval(t *testing.T) {
 	world := NewWorld()
 	store, err := RegisterSchema(world, Schema{Name: "test.value", Fields: []Field{{Name: "value", Kind: FieldString}}})
