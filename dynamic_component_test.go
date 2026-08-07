@@ -26,7 +26,11 @@ func TestDynamicComponentsShareTypedArchetypes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer moving.Close()
+	t.Cleanup(func() {
+		if err := moving.Close(); err != nil {
+			t.Errorf("close subscription: %v", err)
+		}
+	})
 
 	entity := world.MustCreateEntity()
 	if _, err := positions.Set(entity, dynamicTestPosition{X: 10}); err != nil {

@@ -204,9 +204,9 @@ func compileSchema(schema Schema) (compiledSchema, error) {
 		return compiledSchema{}, fmt.Errorf("%w: empty name", ErrInvalidSchema)
 	}
 	result := compiledSchema{Schema: schema, fieldsByName: make(map[string]compiledField)}
-	result.Schema.Fields = append([]Field(nil), schema.Fields...)
+	result.Fields = append([]Field(nil), schema.Fields...)
 	result.defaults = make([]any, len(schema.Fields))
-	for index, field := range result.Schema.Fields {
+	for index, field := range result.Fields {
 		field.Name = strings.TrimSpace(field.Name)
 		if field.Name == "" {
 			return compiledSchema{}, fmt.Errorf("%w: field %d has empty name", ErrInvalidSchema, index)
@@ -219,7 +219,7 @@ func compileSchema(schema Schema) (compiledSchema, error) {
 			return compiledSchema{}, fmt.Errorf("%w: default for %q: %v", ErrInvalidSchema, field.Name, err)
 		}
 		field.Default = value
-		result.Schema.Fields[index] = field
+		result.Fields[index] = field
 		result.defaults[index] = value
 		result.fieldsByName[field.Name] = compiledField{Field: field, index: index}
 	}
