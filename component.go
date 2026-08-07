@@ -23,6 +23,7 @@ type ComponentType interface {
 type componentStore interface {
 	componentKey() ComponentKey
 	has(Entity) bool
+	remove(Entity) bool
 	removeLocked(Entity)
 }
 
@@ -187,6 +188,8 @@ func (s *Store[T]) Remove(entity Entity) bool {
 	}
 	return found
 }
+
+func (s *Store[T]) remove(entity Entity) bool { return s.Remove(entity) }
 
 func (s *Store[T]) removeLocked(entity Entity) {
 	s.mu.Lock()

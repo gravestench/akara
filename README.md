@@ -7,6 +7,11 @@ and systems run deterministically in registration order.
 Akara deliberately does not require component interfaces, constructor methods,
 factory wrappers, runtime casts, or public bit masks.
 
+It also supports validated runtime-defined component schemas. This lets script
+runtimes and data-driven applications participate in the same entities,
+archetypes, filters, and deterministic systems without making Akara depend on a
+particular scripting language.
+
 ## Components
 
 Define components as plain data:
@@ -99,6 +104,44 @@ func RegisterComponents(world *akara.World) Components {
 Pass `Components` or the individual stores to system constructors. Use
 `GetStore[T]` for occasional lookup across package boundaries.
 
+## Runtime-defined components
+
+Applications that do not know every component type at Go compile time can
+register a named schema:
+
+```go
+velocity, err := akara.RegisterSchema(world, akara.Schema{
+	Name:    "movement.velocity",
+	Version: 1,
+	Fields: []akara.Field{
+		{Name: "x", Kind: akara.FieldFloat64},
+		{Name: "y", Kind: akara.FieldFloat64},
+	},
+})
+if err != nil {
+	return err
+}
+
+component, err := velocity.Set(entity, map[string]any{
+	"x": float64(4),
+	"y": float64(-2),
+})
+if err != nil {
+	return err
+}
+
+x, err := component.Get("x")
+```
+
+Runtime stores implement `ComponentType`, so filters may freely combine typed
+and runtime-defined components. Values are validated against their schemas, and
+component references are generation checked: removing or replacing an instance
+invalidates earlier references instead of silently targeting unrelated storage.
+
+Runtime adapters should translate their own values into Akara's deliberately
+small field vocabulary. Akara does not import Lua, JavaScript, serialization, or
+application-specific schema packages.
+
 ## Subscriptions
 
 Subscriptions accept typed store handles directly:
@@ -133,6 +176,10 @@ A filter cannot accidentally use a store from another world; `Subscribe` returns
 
 Subscriptions are independent. `Ignore` and `Include` affect only that subscription.
 Call `Close` when a subscription is no longer needed.
+
+When a system needs to add or remove components while iterating a query, queue
+those structural mutations in a `CommandBuffer` and apply it at the system or
+phase barrier. Ordinary component field updates can remain immediate.
 
 ## Deterministic systems
 

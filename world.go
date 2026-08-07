@@ -31,6 +31,7 @@ type World struct {
 	nextEntityID   atomic.Uint64
 	registryMu     sync.RWMutex
 	storesByType   map[reflect.Type]componentStore
+	storesByName   map[string]*DynamicStore
 	stores         []componentStore
 	subscriptions  map[*Subscription]struct{}
 	archetypes     map[uint64][]*archetype
@@ -50,6 +51,7 @@ func NewWorld() *World {
 	world := &World{
 		entities:      make(map[Entity]entityState),
 		storesByType:  make(map[reflect.Type]componentStore),
+		storesByName:  make(map[string]*DynamicStore),
 		subscriptions: make(map[*Subscription]struct{}),
 		archetypes:    make(map[uint64][]*archetype),
 		done:          make(chan struct{}),
