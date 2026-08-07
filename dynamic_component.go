@@ -17,6 +17,7 @@ var (
 	ErrInvalidFieldValue  = errors.New("akara: invalid component field value")
 	ErrComponentNotFound  = errors.New("akara: entity does not have component")
 	ErrComponentReference = errors.New("akara: component reference is stale")
+	ErrSchemaVersion      = errors.New("akara: schema version must increase")
 )
 
 // FieldKind is the storage and validation type of a runtime-defined field.
@@ -73,14 +74,79 @@ type DynamicStore struct {
 	nextGen   uint64
 }
 
+// Migration converts one component snapshot to values for a replacement schema.
+type Migration func(entity Entity, previous map[string]any) (map[string]any, error)
+
 func (s *DynamicStore) componentKey() ComponentKey { return s.key }
 func (s *DynamicStore) Key() ComponentKey          { return s.key }
 
 // Schema returns a defensive copy of the registered schema.
 func (s *DynamicStore) Schema() Schema {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	result := s.schema.Schema
 	result.Fields = append([]Field(nil), result.Fields...)
 	return result
+}
+
+// Migrate transactionally replaces this store's schema and all of its component
+// instances. The name must remain stable and the version must increase. If any
+// conversion or validation fails, neither schema nor instances are changed.
+func (s *DynamicStore) Migrate(next Schema, migrate Migration) error {
+	if migrate == nil {
+		return fmt.Errorf("%w: nil migration", ErrInvalidSchema)
+	}
+	compiled, err := compileSchema(next)
+	if err != nil {
+		return err
+	}
+	s.world.mutationMu.Lock()
+	defer s.world.mutationMu.Unlock()
+	if s.world.closed.Load() {
+		return ErrWorldClosed
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if compiled.Name != s.schema.Name {
+		return fmt.Errorf("%w: migration changes name %q to %q", ErrSchemaConflict, s.schema.Name, compiled.Name)
+	}
+	if compiled.Version <= s.schema.Version {
+		return fmt.Errorf("%w: current %d, next %d", ErrSchemaVersion, s.schema.Version, compiled.Version)
+	}
+	replacements := make(map[Entity]*dynamicInstance, len(s.instances))
+	entities := make([]Entity, 0, len(s.instances))
+	for entity := range s.instances {
+		entities = append(entities, entity)
+	}
+	sort.Slice(entities, func(i, j int) bool { return entities[i] < entities[j] })
+	for _, entity := range entities {
+		instance := s.instances[entity]
+		previous := make(map[string]any, len(s.schema.Fields))
+		for index, field := range s.schema.Fields {
+			previous[field.Name] = instance.values[index]
+		}
+		values, err := migrate(entity, previous)
+		if err != nil {
+			return fmt.Errorf("akara: migrate %q entity %d: %w", s.schema.Name, entity, err)
+		}
+		normalized := append([]any(nil), compiled.defaults...)
+		for name, value := range values {
+			field, found := compiled.fieldsByName[name]
+			if !found {
+				return fmt.Errorf("akara: migrate %q entity %d: %w: %q", s.schema.Name, entity, ErrFieldNotFound, name)
+			}
+			value, err = normalizeFieldValue(field.Kind, value)
+			if err != nil {
+				return fmt.Errorf("akara: migrate %q entity %d: %w: %q: %v", s.schema.Name, entity, ErrInvalidFieldValue, name, err)
+			}
+			normalized[field.index] = value
+		}
+		s.nextGen++
+		replacements[entity] = &dynamicInstance{generation: s.nextGen, values: normalized}
+	}
+	s.schema = compiled
+	s.instances = replacements
+	return nil
 }
 
 // RegisterSchema returns the canonical runtime-defined store for schema.Name.

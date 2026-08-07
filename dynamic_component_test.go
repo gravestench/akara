@@ -139,3 +139,51 @@ func TestDynamicEntityReferenceField(t *testing.T) {
 		t.Fatalf("untyped entity error = %v", err)
 	}
 }
+
+func TestDynamicSchemaMigrationIsTransactional(t *testing.T) {
+	world := NewWorld()
+	store, err := RegisterSchema(world, Schema{
+		Name: "position", Version: 1,
+		Fields: []Field{{Name: "x", Kind: FieldFloat64}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstEntity, secondEntity := world.MustCreateEntity(), world.MustCreateEntity()
+	first, _ := store.Set(firstEntity, map[string]any{"x": float64(3)})
+	_, _ = store.Set(secondEntity, map[string]any{"x": float64(4)})
+	next := Schema{
+		Name: "position", Version: 2,
+		Fields: []Field{{Name: "x", Kind: FieldFloat64}, {Name: "y", Kind: FieldFloat64}},
+	}
+	failure := errors.New("migration failed")
+	err = store.Migrate(next, func(entity Entity, previous map[string]any) (map[string]any, error) {
+		if entity == secondEntity {
+			return nil, failure
+		}
+		return map[string]any{"x": previous["x"], "y": float64(9)}, nil
+	})
+	if !errors.Is(err, failure) || store.Schema().Version != 1 {
+		t.Fatalf("failed migration changed schema: version=%d err=%v", store.Schema().Version, err)
+	}
+	if value, err := first.Get("x"); err != nil || value != float64(3) {
+		t.Fatalf("failed migration changed instance: value=%v err=%v", value, err)
+	}
+
+	err = store.Migrate(next, func(_ Entity, previous map[string]any) (map[string]any, error) {
+		return map[string]any{"x": previous["x"], "y": float64(9)}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := first.Get("x"); !errors.Is(err, ErrComponentReference) {
+		t.Fatalf("migration did not invalidate old reference: %v", err)
+	}
+	migrated, found := store.Get(firstEntity)
+	if !found {
+		t.Fatal("migrated component missing")
+	}
+	if value, err := migrated.Get("y"); err != nil || value != float64(9) {
+		t.Fatalf("migrated y=%v err=%v", value, err)
+	}
+}
