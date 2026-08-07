@@ -3,6 +3,7 @@ package akara
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 )
 
@@ -20,6 +21,54 @@ type CommandBuffer struct {
 
 // NewCommandBuffer creates an empty structural command buffer.
 func NewCommandBuffer() *CommandBuffer { return &CommandBuffer{} }
+
+// CreateDynamic queues creation of an entity with runtime-defined components.
+// The new entity becomes visible after Apply; systems that need to communicate
+// its identity should assign a stable application identifier component.
+func (buffer *CommandBuffer) CreateDynamic(world *World, components map[*DynamicStore]map[string]any) {
+	copied := make(map[*DynamicStore]map[string]any, len(components))
+	for store, values := range components {
+		copyValues := make(map[string]any, len(values))
+		for name, value := range values {
+			copyValues[name] = value
+		}
+		copied[store] = copyValues
+	}
+	buffer.append(func() error {
+		if world == nil {
+			return ErrEntityNotFound
+		}
+		entity, err := world.CreateEntity()
+		if err != nil {
+			return err
+		}
+		stores := make([]*DynamicStore, 0, len(copied))
+		for store := range copied {
+			stores = append(stores, store)
+		}
+		sort.Slice(stores, func(i, j int) bool {
+			if stores[i] == nil {
+				return true
+			}
+			if stores[j] == nil {
+				return false
+			}
+			return stores[i].key.id < stores[j].key.id
+		})
+		for _, store := range stores {
+			values := copied[store]
+			if store == nil || store.world != world {
+				world.DestroyEntity(entity)
+				return ErrForeignComponent
+			}
+			if _, err := store.Set(entity, values); err != nil {
+				world.DestroyEntity(entity)
+				return err
+			}
+		}
+		return nil
+	})
+}
 
 // AddDynamic queues addition or replacement of a runtime-defined component.
 // The values map is copied at submission time.

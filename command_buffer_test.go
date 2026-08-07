@@ -52,3 +52,32 @@ func TestCommandBufferCopiesDynamicValues(t *testing.T) {
 		t.Fatalf("value = %v, err = %v", got, err)
 	}
 }
+
+func TestCommandBufferCreatesEntityWithDynamicComponents(t *testing.T) {
+	world := NewWorld()
+	store, err := RegisterSchema(world, Schema{Name: "spawn", Fields: []Field{{Name: "kind", Kind: FieldString}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	values := map[string]any{"kind": "monster"}
+	buffer := NewCommandBuffer()
+	buffer.CreateDynamic(world, map[*DynamicStore]map[string]any{store: values})
+	values["kind"] = "changed"
+	if len(world.Entities()) != 0 {
+		t.Fatal("entity created before command barrier")
+	}
+	if err := buffer.Apply(); err != nil {
+		t.Fatal(err)
+	}
+	entities := world.Entities()
+	if len(entities) != 1 {
+		t.Fatalf("entities = %v", entities)
+	}
+	component, found := store.Get(entities[0])
+	if !found {
+		t.Fatal("created component missing")
+	}
+	if value, err := component.Get("kind"); err != nil || value != "monster" {
+		t.Fatalf("kind = %v, err = %v", value, err)
+	}
+}
