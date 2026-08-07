@@ -78,7 +78,11 @@ func TestDynamicSchemaRegistrationAndValidation(t *testing.T) {
 
 func TestDynamicStoresAreSortedRegistrySnapshot(t *testing.T) {
 	world := NewWorld()
-	defer world.Close()
+	t.Cleanup(func() {
+		if err := world.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	second, err := RegisterSchema(world, Schema{Name: "world.velocity"})
 	if err != nil {
 		t.Fatal(err)
