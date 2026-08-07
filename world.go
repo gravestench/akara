@@ -3,6 +3,7 @@ package akara
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"sync"
@@ -12,6 +13,7 @@ import (
 var (
 	ErrWorldClosed       = errors.New("akara: world is closed")
 	ErrEntityNotFound    = errors.New("akara: entity does not exist")
+	ErrEntityExists      = errors.New("akara: entity already exists")
 	ErrForeignComponent  = errors.New("akara: component belongs to another world")
 	ErrNilComponent      = errors.New("akara: component handle is nil")
 	ErrNilSystem         = errors.New("akara: system is nil")
@@ -91,6 +93,31 @@ func (world *World) CreateEntity() (Entity, error) {
 	world.entities[entity] = state
 	world.emptyArchetype.entities[entity] = struct{}{}
 	return entity, nil
+}
+
+// CreateEntityWithID creates an entity with an explicit non-zero identity.
+// This is intended for trusted snapshot restoration. Normal simulation should
+// use CreateEntity so identity allocation remains encapsulated by the world.
+func (world *World) CreateEntityWithID(entity Entity) error {
+	if entity == 0 {
+		return ErrEntityNotFound
+	}
+	world.mutationMu.Lock()
+	defer world.mutationMu.Unlock()
+	if world.closed.Load() {
+		return ErrWorldClosed
+	}
+	if _, exists := world.entities[entity]; exists {
+		return fmt.Errorf("%w: %d", ErrEntityExists, entity)
+	}
+	world.entities[entity] = entityState{archetype: world.emptyArchetype}
+	world.emptyArchetype.entities[entity] = struct{}{}
+	for current := world.nextEntityID.Load(); current < uint64(entity); current = world.nextEntityID.Load() {
+		if world.nextEntityID.CompareAndSwap(current, uint64(entity)) {
+			break
+		}
+	}
+	return nil
 }
 
 // MustCreateEntity creates an entity or panics. It is convenient during trusted

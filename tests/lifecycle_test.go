@@ -57,3 +57,24 @@ func TestEntitySnapshotsAreIsolated(t *testing.T) {
 		t.Fatal("caller mutated entity snapshot")
 	}
 }
+
+func TestCreateEntityWithIDRestoresIdentityAndAdvancesAllocator(t *testing.T) {
+	world := akara.NewWorld()
+	t.Cleanup(func() { _ = world.Close() })
+	if err := world.CreateEntityWithID(akara.Entity(7)); err != nil {
+		t.Fatal(err)
+	}
+	if err := world.CreateEntityWithID(akara.Entity(7)); !errors.Is(err, akara.ErrEntityExists) {
+		t.Fatalf("duplicate error = %v", err)
+	}
+	if err := world.CreateEntityWithID(0); !errors.Is(err, akara.ErrEntityNotFound) {
+		t.Fatalf("zero error = %v", err)
+	}
+	entity, err := world.CreateEntity()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entity != 8 {
+		t.Fatalf("next entity = %d", entity)
+	}
+}
