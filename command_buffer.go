@@ -30,7 +30,7 @@ func (buffer *CommandBuffer) CreateDynamic(world *World, components map[*Dynamic
 	for store, values := range components {
 		copyValues := make(map[string]any, len(values))
 		for name, value := range values {
-			copyValues[name] = value
+			copyValues[name] = cloneDynamicValue(value)
 		}
 		copied[store] = copyValues
 	}
@@ -75,7 +75,7 @@ func (buffer *CommandBuffer) CreateDynamic(world *World, components map[*Dynamic
 func (buffer *CommandBuffer) AddDynamic(store *DynamicStore, entity Entity, values map[string]any) {
 	copyValues := make(map[string]any, len(values))
 	for name, value := range values {
-		copyValues[name] = value
+		copyValues[name] = cloneDynamicValue(value)
 	}
 	buffer.append(func() error {
 		if store == nil {

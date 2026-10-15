@@ -30,14 +30,17 @@ const (
 	FieldFloat64
 	FieldString
 	FieldEntity
+	FieldList
+	FieldMap
 )
 
 // Field defines one named field and its optional default value. A nil default
 // selects the zero value for Kind.
 type Field struct {
-	Name    string
-	Kind    FieldKind
-	Default any
+	Name        string
+	Kind        FieldKind
+	ElementKind FieldKind
+	Default     any
 }
 
 // Schema defines a runtime component type. Name is the stable application-level
@@ -86,6 +89,9 @@ func (s *DynamicStore) Schema() Schema {
 	defer s.mu.RUnlock()
 	result := s.schema.Schema
 	result.Fields = append([]Field(nil), result.Fields...)
+	for index := range result.Fields {
+		result.Fields[index].Default = cloneDynamicValue(result.Fields[index].Default)
+	}
 	return result
 }
 
@@ -123,19 +129,19 @@ func (s *DynamicStore) Migrate(next Schema, migrate Migration) error {
 		instance := s.instances[entity]
 		previous := make(map[string]any, len(s.schema.Fields))
 		for index, field := range s.schema.Fields {
-			previous[field.Name] = instance.values[index]
+			previous[field.Name] = cloneDynamicValue(instance.values[index])
 		}
 		values, err := migrate(entity, previous)
 		if err != nil {
 			return fmt.Errorf("akara: migrate %q entity %d: %w", s.schema.Name, entity, err)
 		}
-		normalized := append([]any(nil), compiled.defaults...)
+		normalized := cloneDynamicDefaults(compiled.defaults)
 		for name, value := range values {
 			field, found := compiled.fieldsByName[name]
 			if !found {
 				return fmt.Errorf("akara: migrate %q entity %d: %w: %q", s.schema.Name, entity, ErrFieldNotFound, name)
 			}
-			value, err = normalizeFieldValue(field.Kind, value)
+			value, err = normalizeFieldValue(field.Field, value)
 			if err != nil {
 				return fmt.Errorf("akara: migrate %q entity %d: %w: %q: %v", s.schema.Name, entity, ErrInvalidFieldValue, name, err)
 			}
@@ -233,7 +239,7 @@ func compileSchema(schema Schema) (compiledSchema, error) {
 		if _, exists := result.fieldsByName[field.Name]; exists {
 			return compiledSchema{}, fmt.Errorf("%w: duplicate field %q", ErrInvalidSchema, field.Name)
 		}
-		value, err := normalizeFieldValue(field.Kind, field.Default)
+		value, err := normalizeFieldValue(field, field.Default)
 		if err != nil {
 			return compiledSchema{}, fmt.Errorf("%w: default for %q: %v", ErrInvalidSchema, field.Name, err)
 		}
@@ -245,7 +251,7 @@ func compileSchema(schema Schema) (compiledSchema, error) {
 	return result, nil
 }
 
-func normalizeFieldValue(kind FieldKind, value any) (any, error) {
+func normalizeScalarValue(kind FieldKind, value any) (any, error) {
 	if value == nil {
 		switch kind {
 		case FieldBool:
@@ -321,7 +327,7 @@ func (s *DynamicStore) Add(entity Entity) (*DynamicComponent, error) {
 		s.nextGen++
 		instance = &dynamicInstance{
 			generation: s.nextGen,
-			values:     append([]any(nil), s.schema.defaults...),
+			values:     cloneDynamicDefaults(s.schema.defaults),
 		}
 		s.instances[entity] = instance
 	}
@@ -360,13 +366,13 @@ func (s *DynamicStore) Set(entity Entity, values map[string]any) (*DynamicCompon
 }
 
 func (s *DynamicStore) values(values map[string]any) ([]any, error) {
-	result := append([]any(nil), s.schema.defaults...)
+	result := cloneDynamicDefaults(s.schema.defaults)
 	for name, value := range values {
 		field, found := s.schema.fieldsByName[name]
 		if !found {
 			return nil, fmt.Errorf("%w: %q", ErrFieldNotFound, name)
 		}
-		normalized, err := normalizeFieldValue(field.Kind, value)
+		normalized, err := normalizeFieldValue(field.Field, value)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %q: %v", ErrInvalidFieldValue, name, err)
 		}
@@ -459,7 +465,7 @@ func (c *DynamicComponent) Get(name string) (any, error) {
 	if !found || instance.generation != c.generation {
 		return nil, ErrComponentReference
 	}
-	return instance.values[field.index], nil
+	return cloneDynamicValue(instance.values[field.index]), nil
 }
 
 func (c *DynamicComponent) Set(name string, value any) error {
@@ -467,7 +473,7 @@ func (c *DynamicComponent) Set(name string, value any) error {
 	if !found {
 		return fmt.Errorf("%w: %q", ErrFieldNotFound, name)
 	}
-	normalized, err := normalizeFieldValue(field.Kind, value)
+	normalized, err := normalizeFieldValue(field.Field, value)
 	if err != nil {
 		return fmt.Errorf("%w: %q: %v", ErrInvalidFieldValue, name, err)
 	}
@@ -491,7 +497,7 @@ func (c *DynamicComponent) Snapshot() (map[string]any, error) {
 	}
 	result := make(map[string]any, len(c.store.schema.Fields))
 	for index, field := range c.store.schema.Fields {
-		result[field.Name] = instance.values[index]
+		result[field.Name] = cloneDynamicValue(instance.values[index])
 	}
 	return result, nil
 }

@@ -2,6 +2,7 @@ package akara
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -50,6 +51,54 @@ func TestCommandBufferCopiesDynamicValues(t *testing.T) {
 	}
 	if got, err := component.Get("value"); err != nil || got != "before" {
 		t.Fatalf("value = %v, err = %v", got, err)
+	}
+}
+
+func TestCommandBufferCopiesDynamicCollections(t *testing.T) {
+	world := NewWorld()
+	store, err := RegisterSchema(world, Schema{
+		Name: "collection.buffer",
+		Fields: []Field{
+			{Name: "items", Kind: FieldList, ElementKind: FieldString},
+			{Name: "counts", Kind: FieldMap, ElementKind: FieldInt64},
+		},
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	entity := world.MustCreateEntity()
+	items := []any{"before"}
+	counts := map[string]any{"one": int64(1)}
+	buffer := NewCommandBuffer()
+	buffer.AddDynamic(store, entity, map[string]any{
+		"items":  items,
+		"counts": counts,
+	})
+
+	items[0] = "after"
+	counts["one"] = int64(2)
+
+	if err := buffer.Apply(); err != nil {
+		t.Fatal(err)
+	}
+
+	component, found := store.Get(entity)
+
+	if !found {
+		t.Fatal("buffer did not add collection component")
+	}
+
+	values, err := component.Snapshot()
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(values["items"], []any{"before"}) ||
+		!reflect.DeepEqual(values["counts"], map[string]any{"one": int64(1)}) {
+		t.Fatalf("buffer retained caller memory: %#v", values)
 	}
 }
 

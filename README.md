@@ -138,6 +138,13 @@ and runtime-defined components. Values are validated against their schemas, and
 component references are generation checked: removing or replacing an instance
 invalidates earlier references instead of silently targeting unrelated storage.
 
+Runtime schemas can also store homogeneous `FieldList` and `FieldMap` values.
+Set `ElementKind` to one of the six scalar field kinds. Lists use `[]any` and
+maps use `map[string]any`; both default to empty collections. Nested collection
+kinds are rejected. Akara copies collections when registering defaults,
+writing components, reading components, taking snapshots, and buffering
+commands, so callers cannot change stored state through an earlier value.
+
 Runtime adapters should translate their own values into Akara's deliberately
 small field vocabulary. Akara does not import Lua, JavaScript, serialization, or
 application-specific schema packages.
